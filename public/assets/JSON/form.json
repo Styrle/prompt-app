@@ -1,0 +1,797 @@
+{
+  "formTitle": "Default form",
+  "description": "",
+  "questions": [
+    {
+      "id": "q1",
+      "title": "Which category of prompt do you need?",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "Questions (Produce OT or Written test)",
+        "Video scripts (Generic , VOPP, introduction to learning module or question debrief)",
+        "Written material (text) from scratch",
+        "Debriefs and answers (Write an answer or debrief)",
+        "Rewrite text (Simplify, dyslexic friendly or make more engaging)",
+        "Review material (Better feedback or included KSBs etc.)",
+        "Other (Real world examples/ Tax update/Teaching plan/Proofread/Copyright review/Glossary/Apply Business mngt model/Compare texts/Illustrative scripts)",
+        "Do my own thing"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Questions (Produce OT or Written test)",
+          "goToQuestion": "q4"
+        },
+        {
+          "option": "Video scripts (Generic , VOPP, introduction to learning module or question debrief)",
+          "goToQuestion": "q3"
+        },
+        {
+          "option": "Written material (text) from scratch",
+          "goToQuestion": "q3"
+        },
+        {
+          "option": "Debriefs and answers (Write an answer or debrief)",
+          "goToQuestion": "q3"
+        },
+        {
+          "option": "Rewrite text (Simplify, dyslexic friendly or make more engaging)",
+          "goToQuestion": "q3"
+        },
+        {
+          "option": "Review material (Better feedback or included KSBs etc.)",
+          "goToQuestion": "q3"
+        },
+        {
+          "option": "Other (Real world examples/ Tax update/Teaching plan/Proofread/Copyright review/Glossary/Apply Business mngt model/Compare texts/Illustrative scripts)",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Do my own thing",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "title": "What specific prompt do you require? (Questions)",
+      "isRequired": false,
+      "helpText": "What type of question are you producing? If you select 'Objective test questions' you will be asked whether these are from scratch or based on existing questions later.",
+      "type": "multiple_choice",
+      "options": [
+        "Objective test questions",
+        "Written test question (from scratch)",
+        "Written test question (from existing)"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Objective test questions",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Written test question (from scratch)",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Written test question (from existing)",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "title": "Type the number of marks required for your new written test question",
+      "isRequired": false,
+      "type": "paragraph"
+    },
+    {
+      "id": "q4",
+      "title": "What type of material are you creating? (Written material from scratch)",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "Summary notes / Revision Cards / Flash cards",
+        "IWB",
+        "Study text",
+        "Online module",
+        "Other"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Summary notes / Revision Cards / Flash cards",
+          "goToQuestion": ""
+        },
+        {
+          "option": "IWB",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Study text",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Online module",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Other",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "title": "What specific prompt do you require? (Video script)",
+      "isRequired": false,
+      "helpText": "What type of video are you producing?",
+      "type": "multiple_choice",
+      "options": [
+        "Produce generic video script",
+        "Introduction to a learning module video script",
+        "Written question debrief script",
+        "OT question debrief script",
+        "VOPP script from underlying text",
+        "Improve an existing VOPP script"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Produce generic video script",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Introduction to a learning module video script",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Written question debrief script",
+          "goToQuestion": ""
+        },
+        {
+          "option": "OT question debrief script",
+          "goToQuestion": ""
+        },
+        {
+          "option": "VOPP script from underlying text",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Improve an existing VOPP script",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q6",
+      "title": "What specific prompt do you require? (Debriefs and answers)",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "Produce a written question debrief",
+        "Produce an OTQ debrief",
+        "Write an answer to a question"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Produce a written question debrief",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Produce an OTQ debrief",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Write an answer to a question",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q7",
+      "title": "How many marks are available for the question?",
+      "isRequired": false,
+      "type": "paragraph"
+    },
+    {
+      "id": "q8",
+      "title": "What  prompt do you require (select all that apply)?   (Rewrite text)",
+      "isRequired": false,
+      "type": "checkbox",
+      "options": [
+        "Simplify Text",
+        "Rewrite text to make it more engaging",
+        "Make dyslexia friendly"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Simplify Text",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Rewrite text to make it more engaging",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Make dyslexia friendly",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q9",
+      "title": "What do you want the review to achieve? (Review material)",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "Text to identify KSB / Functional Skills/British Values included",
+        "Existing OTs to give better feedback",
+        "Questions to identify KSB / Functional skills / British Values included"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Text to identify KSB / Functional Skills/British Values included",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Existing OTs to give better feedback",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Questions to identify KSB / Functional skills / British Values included",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "title": "What specific prompt do you require? (Other)",
+      "isRequired": false,
+      "helpText": "Note: If you select 'Compare texts' it is assumed that the texts will be contained in a document already uploaded to KaplanGPT.\n\nNote: The purpose of the 'Teaching plan' prompt is to help produce a course guide by taking an existing course guide and identifying the following to be incorporated:\n- Functional skills\n- British values\n- KSBs\n- Real-world examples\n- Progression / employability / personal development",
+      "type": "multiple_choice",
+      "options": [
+        "Real world examples",
+        "Tax update",
+        "Teaching plan",
+        "Proofread",
+        "Copyright review",
+        "Glossary",
+        "Apply a business management model to a scenario",
+        "Compare texts",
+        "Illustrative script"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Real world examples",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Tax update",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Teaching plan",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Proofread",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Copyright review",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Glossary",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Apply a business management model to a scenario",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Compare texts",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Illustrative script",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "title": "Which business management model would you like to apply to the scenario?",
+      "isRequired": false,
+      "type": "paragraph"
+    },
+    {
+      "id": "q12",
+      "title": "Would you like to reference British Values as part of your prompt?",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Yes",
+          "goToQuestion": ""
+        },
+        {
+          "option": "No",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "title": "Do you want to use a taxonomy for this subject,  something custom or an existing document upload?",
+      "isRequired": false,
+      "helpText": "You have 3 options for the subject matter on which to base your video script:\n\n1/ For specific syllabus outcomes, please select the \"taxonomy\" option.  These taxonomies are unique to your paper and will allow you to test key syllabus areas and ensure syllabus coverage.  You can \"wide-ranging by only selecting L1 or L2, or if you want to drill down into a specific area of the syllabus, you can go all the way to L4 options.\n\n2/ If you want to specify the subject matter yourself, then you can use the \"custom\" option and type in your desired subject matter.\n\n3/ Alternatively, you may wish to use part or all of an existing document (such as an IWB). These documents can be uploaded into Azure. In this instance, select 'Existing document upload'.",
+      "type": "multiple_choice",
+      "options": [
+        "Taxonomy",
+        "Custom",
+        "Existing document upload"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Taxonomy",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Custom",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Existing document upload",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "title": "Are you going to input some original text or use an existing document upload?",
+      "isRequired": false,
+      "helpText": "You can use the \"original text\" option in order to submit the existing question and answer on which to base the new question(s) you're creating.\n\nAlternatively, you may wish to use part or all of an existing document (such as an IWB). These documents can be uploaded into Azure. In this instance, select 'Existing document upload'.",
+      "type": "multiple_choice",
+      "options": [
+        "Original text",
+        "Existing document upload"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Original text",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Existing document upload",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q15",
+      "title": "Input the subject matter for your prompt here.",
+      "isRequired": false,
+      "helpText": "You should input the subject matter for your prompt by answering the question below.\n\nNote: If you are \"doing your own thing\" rather than following a specific prompt, please type your desired prompt here.",
+      "type": "paragraph"
+    },
+    {
+      "id": "q16",
+      "title": "Would you like to use all the uploaded document, or just part?",
+      "isRequired": false,
+      "type": "multiple_choice",
+      "options": [
+        "all",
+        "part of"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "all",
+          "goToQuestion": ""
+        },
+        {
+          "option": "part of",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "title": "Please identify the specific section of text you want to use.",
+      "isRequired": false,
+      "helpText": "Please identify the specific part of the uploaded document which you wish to use. (avoid using page numbers) Examples:\n\n- Test your understanding 2\n- Illustration 9\n- Question 33 and Answer 33\n- Chapter 12 Deferred taxation\n- Chapter 11 Hedge accounting, S4.2 Criteria for hedge accounting",
+      "type": "paragraph"
+    },
+    {
+      "id": "q18",
+      "title": "Number of questions",
+      "isRequired": false,
+      "helpText": "Please indicate the number of OT questions you would like to create.  As a general rule, it is better to ask for more than you need.  For example, if you want ten good questions, ask for fifteen and filter out the ones you are not as happy with.\n\nThis can be written or numerical, i.e. 10 or ten.",
+      "type": "paragraph"
+    },
+    {
+      "id": "q19",
+      "title": "Which of the following would you like to include (select all that apply - or none)",
+      "isRequired": false,
+      "helpText": "Here you can decide which, if any, of the KSBs / British values / Functional skills you want to have referenced in the feedback to the OTQs you are creating.",
+      "type": "checkbox",
+      "options": [
+        "British values",
+        "KSB's",
+        "Functional skills"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "British values",
+          "goToQuestion": ""
+        },
+        {
+          "option": "KSB's",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Functional skills",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q20",
+      "title": "What type of question do you want to create?",
+      "isRequired": false,
+      "helpText": "Please choose the type of objective test question you would like to create. If you do not see your question type listed in the options, you can choose \"other question type\" and be guided to then input the type of question you want to create.",
+      "type": "multiple_choice",
+      "options": [
+        "multiple choice",
+        "select two from five",
+        "select all that apply",
+        "Other question type",
+        "Fill in the gaps"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "multiple choice",
+          "goToQuestion": ""
+        },
+        {
+          "option": "select two from five",
+          "goToQuestion": ""
+        },
+        {
+          "option": "select all that apply",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Other question type",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Fill in the gaps",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q21",
+      "title": "How many gaps?",
+      "isRequired": false,
+      "helpText": "How many gaps would you like to be included in your 'fill in the gaps' style question?",
+      "type": "paragraph"
+    },
+    {
+      "id": "q22",
+      "title": "Other question type",
+      "isRequired": false,
+      "helpText": "Please indicate in the box below the type of objective test question you want to create.\n\nFor example, you could write:\n\n'select two from four'",
+      "type": "paragraph"
+    },
+    {
+      "id": "q23",
+      "title": "Theory or calculation based",
+      "isRequired": false,
+      "helpText": "Please choose the balance of calculation to theory based objective test questions you would like to create.",
+      "type": "multiple_choice",
+      "options": [
+        "theory based with no numerical requirements",
+        "calculation based",
+        "mixture of calculation (numerical) and theory based"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "theory based with no numerical requirements",
+          "goToQuestion": ""
+        },
+        {
+          "option": "calculation based",
+          "goToQuestion": ""
+        },
+        {
+          "option": "mixture of calculation (numerical) and theory based",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q24",
+      "title": "Number of words in scenario",
+      "isRequired": false,
+      "helpText": "You can use this option to specify the number of words in the objective test question scenario.  \n\nYou might want to create case study style questions where you need a large scenario, or OTQs where you want the information provided to be limited.  If you have no preference, select \"any number of\".",
+      "type": "multiple_choice",
+      "options": [
+        "up to 50",
+        "51 - 100",
+        "101 - 150",
+        "151 - 200",
+        "200 +",
+        "any number of"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "up to 50",
+          "goToQuestion": ""
+        },
+        {
+          "option": "51 - 100",
+          "goToQuestion": ""
+        },
+        {
+          "option": "101 - 150",
+          "goToQuestion": ""
+        },
+        {
+          "option": "151 - 200",
+          "goToQuestion": ""
+        },
+        {
+          "option": "200 +",
+          "goToQuestion": ""
+        },
+        {
+          "option": "any number of",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q25",
+      "title": "Please select the tax year of the existing material you need to update.",
+      "isRequired": false,
+      "helpText": "Please choose the tax year of the material which you already have, but want to update.",
+      "type": "multiple_choice",
+      "options": [
+        "2022/23",
+        "2023/24",
+        "2024/25",
+        "2025/26",
+        "2026/27",
+        "2027/28"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "2022/23",
+          "goToQuestion": ""
+        },
+        {
+          "option": "2023/24",
+          "goToQuestion": ""
+        },
+        {
+          "option": "2024/25",
+          "goToQuestion": ""
+        },
+        {
+          "option": "2025/26",
+          "goToQuestion": ""
+        },
+        {
+          "option": "2026/27",
+          "goToQuestion": ""
+        },
+        {
+          "option": "2027/28",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q26",
+      "title": "Please select the tax year you wish to update to.",
+      "isRequired": false,
+      "helpText": "Please choose the tax year which you would like to update your material to.\n\nNOTE: After answering this question you will then be asked to input 'original text'. This should be the text that needs to be updated for the new rules. \n\nYou will need to ensure that KaplanGPT is working from an uploaded document. This may be the key point summary for the relevant new Finance Act, or any other document that you have uploaded into KaplanGPT which you wish to use as a summary of the relevant tax update to be applied.",
+      "type": "multiple_choice",
+      "options": [
+        "23/24",
+        "24/25",
+        "25/26",
+        "26/27",
+        "27/28",
+        "28/29"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "23/24",
+          "goToQuestion": ""
+        },
+        {
+          "option": "24/25",
+          "goToQuestion": ""
+        },
+        {
+          "option": "25/26",
+          "goToQuestion": ""
+        },
+        {
+          "option": "26/27",
+          "goToQuestion": ""
+        },
+        {
+          "option": "27/28",
+          "goToQuestion": ""
+        },
+        {
+          "option": "28/29",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q27",
+      "title": "Are you going to input the subject matter yourself, or use the taxonomy?",
+      "isRequired": false,
+      "helpText": "You are being asked this question for one of the following reasons:\n- You are producing an OTQ or WTQ from an existing question and you need to specify the subject matter for your new question.\n- You are producing an OTQ or WTQ from scratch and you need to specify the subject matter for your new question.\n- You are seeking Real world examples and you need to specify the subject matter to be illustrated by the examples.\n- You are creating written material (text) from scratch and you need to specify the subject matter for your new material.\n\nYou have 2 options for the subject matter on which to base your prompt:\n\n1/ For specific syllabus outcomes, please select the \"taxonomy\" option.  These taxonomies are unique to your paper and will allow you to test key syllabus areas and ensure syllabus coverage.  You can \"wide-ranging by only selecting L1 or L2, or if you want to drill down into a specific area of the syllabus, you can go all the way to L4 options.\n\n2/ If you want to specify the subject matter yourself, then you can use the \"original text\" option and type in your desired subject matter.",
+      "type": "multiple_choice",
+      "options": [
+        "Original text",
+        "Taxonomy"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Original text",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Taxonomy",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q28",
+      "title": "Please copy the question you want to use as a template here. Note: There is a separate place for you to add the answer.",
+      "isRequired": false,
+      "helpText": "You are creating a prompt to produce a new written or objective test question based on an existing question.\n\nThis is where you will input the existing question you are using as a template. \n\nDo not submit the answer here!",
+      "type": "paragraph"
+    },
+    {
+      "id": "q29",
+      "title": "Please copy the answer you want to use as a template here.",
+      "isRequired": false,
+      "helpText": "You are creating a prompt to produce a new written or objective test question based on an existing question.\n\nThis is where you will input the existing answer you are using as a template. ",
+      "type": "paragraph"
+    },
+    {
+      "id": "q30",
+      "title": "Do you wish to use the content of an uploaded document or copy the material directly into this form?",
+      "isRequired": false,
+      "helpText": "You are being asked this question because you are trying to produce one of the following prompts:\n- Illustrative script\n- Apply a business management model to a scenario\n- Proofread\n- Copyright review\n- Glossary\n- Teaching plan\n- Rewriting text\n- Reviewing existing material\n- A written debrief or answer\n- A script for a video question debrief or introduction to a learning module\n- Produce a VOPP script from existing text\n- Improve a VOPP script\n\nIn order to produce your prompt, you need to make available the content on which your prompt will be based. \n\nYou can do this by copying the material directly into this form, or by using all or part of an uploaded document.",
+      "type": "multiple_choice",
+      "options": [
+        "Uploaded document",
+        "Copy the material directly into this form"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Uploaded document",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Copy the material directly into this form",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q31",
+      "title": "Would you like to prepare the OTQ from scratch, or use an existing Q as a template?",
+      "isRequired": false,
+      "helpText": "You can create objective test questions from scratch, or by using an eisting objective test question as a template.\n\nNote: If you are using an existing question as a template, you can change the subject matter of the question whilst keeping the style and standard of the original question. Later on, you will be asked to specify the required subject matter for your new question(s).",
+      "type": "multiple_choice",
+      "options": [
+        "From scratch",
+        "Use existing question as a template"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "From scratch",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Use existing question as a template",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q32",
+      "title": "Spare",
+      "isRequired": false,
+      "type": "paragraph"
+    },
+    {
+      "id": "q33",
+      "title": "What level of performance would you like to illustrate?",
+      "isRequired": false,
+      "helpText": "Please state the level of performance you want illustrated.\n\nThe illustration will identify issues with:\n- Addressing the requirement - Workings - Technical knowledge - Clarity of writing - Calculations.\n\nNote: In the following questions you will have the opportunity to input the resources which will be used to generate the script (e.g. Question, Answer, Marking guide). Alternatively you will have the option to use all or part of an uploaded document instead.",
+      "type": "multiple_choice",
+      "options": [
+        "Poor",
+        "Marginal fail",
+        "Marginal Pass",
+        "Clear pass"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "Poor",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Marginal fail",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Marginal Pass",
+          "goToQuestion": ""
+        },
+        {
+          "option": "Clear pass",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q34",
+      "title": "Would you like to use all the uploaded document, or just part?",
+      "isRequired": false,
+      "helpText": "Note - if you select 'all' the next question will ask you whether you want to use the taxonomy or your own text to identify the subject matter of your new question.",
+      "type": "multiple_choice",
+      "options": [
+        "all",
+        "part of"
+      ],
+      "conditionalLogic": [
+        {
+          "option": "all",
+          "goToQuestion": ""
+        },
+        {
+          "option": "part of",
+          "goToQuestion": ""
+        }
+      ]
+    },
+    {
+      "id": "q35",
+      "title": "Please identify the specific section of text you want to use.",
+      "isRequired": false,
+      "helpText": "Please identify the specific part of the uploaded document which you wish to use. (avoid using page numbers) Examples:\n\n- Test your understanding 2\n- Illustration 9\n- Question 33 and Answer 33\n- Chapter 12 Deferred taxation\n- Chapter 11 Hedge accounting, S4.2 Criteria for hedge accounting",
+      "type": "paragraph"
+    },
+    {
+      "id": "q36",
+      "title": "Input the material described above.",
+      "isRequired": false,
+      "helpText": "In order to produce your prompt, you need to make available the content on which your prompt will be based. \n\nYou must do this by copying the material directly into this form.\n\nYou are being asked this question because you are trying to produce one of the following prompts. In brackets are shown the nature of the text you need to input here:\n\n- Illustrative script (The question, answer and if available, marking guide, on which the illustrative script will be based)\n- Apply a business management model to a scenario (The scenario)\n- Proofread (The document to be proofread)\n- Copyright review (The document to be reviewed)\n- Glossary (The document from which to produce the glossary)\n- Teaching plan (The original teaching plan)\n- Rewriting text (The text to be rewritten)\n- Reviewing existing material (The material to be reviewed)\n- A written debrief (The question and answer from which the debrief will be written)\n- A written answer (The question for which an answer is to be written)\n- A script for a video introduction to a learning module (The material being introduced)\n- A script for a video question debrief ( The question and answer to be debriefed in the video)\n- Tax update (The material to be updated)",
+      "type": "paragraph"
+    },
+    {
+      "id": "q37",
+      "title": "End of form",
+      "isRequired": false,
+      "helpText": "This is the last section of the form, once you submit your form, you will be given a link to follow to go to a sheet where you will find your prompt.",
+      "type": "page_break"
+    }
+    ]
+  }
+  

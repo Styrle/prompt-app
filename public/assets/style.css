@@ -30,4 +30,8 @@ body {
     height: 60px;
     margin-top: 5px;
   }
+
+  form div {
+    margin: 10px;
+  }
   
