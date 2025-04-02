@@ -6,13 +6,15 @@ const PDFParser = require("pdf2json");
 const app = express();
 const PORT = 3000;
 
+// Our global qualification → subject map
 const qualificationMap = {};
 
-app.use(express.static(path.join(__dirname, "public/assets")));
-
-// 1) Load the PDF folder, parse filenames for 3rd/4th words
+/* ------------------------
+   1) LOADING PDFs (optional)
+   ------------------------ */
 function loadPdfInfo() {
   const pdfDir = path.join(__dirname, "pdf");
+  if (!fs.existsSync(pdfDir)) return;
   const allPdfs = fs.readdirSync(pdfDir).filter(f => f.toLowerCase().endsWith(".pdf"));
   allPdfs.forEach(filename => {
     const base = filename.replace(/\.pdf$/i, "");
@@ -27,79 +29,33 @@ function loadPdfInfo() {
     }
   });
 }
-loadPdfInfo();
 
-// Serve static files (including style.css)
-app.use(express.static(path.join(__dirname, "public")));
-
-// Home page: let user pick qualification → subject
-app.get("/", (req, res) => {
-  const allQualifications = Object.keys(qualificationMap);
-
-  let html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8"/>
-    <title>Qualifications</title>
-    <link rel="stylesheet" href="/style.css" />
-    <script>
-      const data = ${JSON.stringify(qualificationMap)};
-      function showSubjects(qual) {
-        document.getElementById("heading").textContent = "Choose your subject";
-        const container = document.getElementById("subject-container");
-        container.innerHTML = "";
-        const subjectsMap = data[qual];
-        for (let subject in subjectsMap) {
-          const btn = document.createElement("button");
-          btn.textContent = subject;
-          btn.onclick = () => {
-            window.location.href = "/editForm?qualification=" + qual + "&subject=" + subject;
-          };
-          container.appendChild(btn);
-        }
-      }
-    </script>
-  </head>
-  <body>
-    <h1 id="heading">Choose your qualification</h1>
-    <div>
-      ${allQualifications.map(q => {
-        return `<button onclick="showSubjects('${q}')">${q}</button>`
-      }).join(" ")}
-    </div>
-    <hr/>
-    <div id="subject-container"></div>
-  </body>
-  </html>
-  `;
-  res.send(html);
-});
-
+/* ------------------------
+   2) LOADING JSON Data
+   ------------------------ */
 function loadJsonInfo() {
   const jsonDir = path.join(__dirname, "public/assets/JSON");
-  const allJsons = fs.readdirSync(jsonDir)
-    .filter(f => f.toLowerCase().endsWith(".json") && f !== "form.json");
-  
+  if (!fs.existsSync(jsonDir)) return;
+
   // Clear existing entries rather than reassigning
   Object.keys(qualificationMap).forEach(key => delete qualificationMap[key]);
+
+  const allJsons = fs.readdirSync(jsonDir)
+    .filter(f => f.toLowerCase().endsWith(".json") && f !== "form.json");
 
   allJsons.forEach(filename => {
     try {
       const jsonPath = path.join(jsonDir, filename);
       const jsonData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-      
-      // Extract qualification from formTitle
+
+      // Use formTitle as the qualification
       const qualification = jsonData.formTitle;
-      
-      // Find the keys after "formTitle" and "description" that have an array value
-      // These should be the paper names (like "BNTA" or "AUDT")
-      const paperKeys = Object.keys(jsonData).filter(key => 
-        key !== "formTitle" && 
-        key !== "description" && 
-        Array.isArray(jsonData[key])
+      if (!qualification) return;
+
+      // Find keys that are array-based (besides formTitle, description)
+      const paperKeys = Object.keys(jsonData).filter(
+        key => key !== "formTitle" && key !== "description" && Array.isArray(jsonData[key])
       );
-      
       if (paperKeys.length > 0) {
         paperKeys.forEach(paper => {
           if (!qualificationMap[qualification]) {
@@ -114,10 +70,89 @@ function loadJsonInfo() {
   });
 }
 
-// Replace the PDF loading with JSON loading in app initialization
+// Initialize data
+loadPdfInfo();
 loadJsonInfo();
 
-// GET /editForm => load the form.json file and build HTML form
+/* ------------------------
+   3) EXPRESS SETUP
+   ------------------------ */
+app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public/assets")));
+
+/* ------------------------
+   4) HOME PAGE
+   ------------------------ */
+app.get("/", (req, res) => {
+  // Serve the main index.html
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+/* ------------------------
+   5) API ENDPOINTS
+   ------------------------ */
+
+/** GET /api/qualifications => Return array of top-level qualifications. */
+app.get("/api/qualifications", (req, res) => {
+  const allQualifications = Object.keys(qualificationMap);
+  res.json(allQualifications);
+});
+
+/** GET /api/subjects => Return the subject list for a given qualification. 
+    e.g. /api/subjects?qualification=ACCA
+*/
+app.get("/api/subjects", (req, res) => {
+  const { qualification } = req.query;
+  if (!qualification) {
+    return res.status(400).json({ error: "Missing 'qualification' query parameter." });
+  }
+  const subjectsMap = qualificationMap[qualification];
+  if (!subjectsMap) {
+    return res.json([]); // Or return a 404 error if you prefer
+  }
+  // Return an array of subject keys
+  const subjectKeys = Object.keys(subjectsMap);
+  res.json(subjectKeys);
+});
+
+/** GET /api/formSnippet => Return snippet for the form 
+    (for embedding on the same page rather than navigating away)
+*/
+app.get("/api/formSnippet", (req, res) => {
+  const { qualification, subject } = req.query;
+  if (!qualification || !subject) {
+    return res.status(400).send("Missing qualification or subject.");
+  }
+
+  try {
+    // Load form.json (or whichever data source) for the form
+    const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
+    const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+
+    // Build the form HTML
+    const formHtml = buildForm(formData);
+
+    // Wrap the snippet in a container with minimal styling
+    const snippet = `
+      <div class="styled-form-container">
+        <h2>${qualification} ${subject}</h2>
+
+        <form>
+          ${formHtml}
+        </form>
+      </div>
+    `;
+    res.send(snippet);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Failed to load form snippet: " + err);
+  }
+});
+
+/* ------------------------
+   6) /editForm => Old route that returns a full page
+   ------------------------ */
 app.get("/editForm", (req, res) => {
   const { qualification, subject } = req.query;
   if (!qualification || !subject) {
@@ -125,30 +160,27 @@ app.get("/editForm", (req, res) => {
   }
 
   try {
-    // Load form.json as in the original code
     const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
     const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
 
-    // Build the HTML form from the JSON data
+    // Build up the HTML form
     const formHtml = buildForm(formData);
 
-    // Create a mapping object for conditional logic
+    // Build a mapping for conditional logic
     const conditionalLogicMap = {};
     if (formData.questions) {
       formData.questions.forEach((question, idx) => {
         if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
           const questionId = question.id || `question-${idx}`;
-          conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => {
-            return {
-              option: escapeName(logic.option),
-              targetId: logic.goToQuestion
-            };
-          });
+          conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
+            option: escapeName(logic.option),
+            targetId: logic.goToQuestion
+          }));
         }
       });
     }
 
-    // Build a mapping of question IDs to indices
+    // Map question IDs to array indices
     const questionIndexMap = {};
     formData.questions.forEach((question, idx) => {
       if (question.id) {
@@ -156,7 +188,7 @@ app.get("/editForm", (req, res) => {
       }
     });
 
-    // Construct final page output
+    // Return a full HTML page
     const pageHtml = `
       <!DOCTYPE html>
       <html>
@@ -175,284 +207,140 @@ app.get("/editForm", (req, res) => {
           <p><a href="/">Return Home</a></p>
         </div>
 
+        <script src="/script.js"></script>
         <script>
-          // Store the conditional logic rules
-          const conditionalLogicMap = ${JSON.stringify(conditionalLogicMap)};
-          
-          // Map question IDs to their indices
-          const questionIndexMap = ${JSON.stringify(questionIndexMap)};
-          
-          // Total questions for bounds checking
-          const totalQuestions = ${formData.questions.length};
-          
-          /**
-           * Handle conditional logic when an option is selected
-           * questionId: the ID of the current question
-           * selectedValue: the value of the selected option
-           */
-          function handleConditionalLogic(questionId, selectedValue) {
-            // Check if this question has conditional logic
-            if (conditionalLogicMap[questionId]) {
-              // Look for a matching rule
-              for (const rule of conditionalLogicMap[questionId]) {
-                if (rule.option === selectedValue) {
-                  // Found a matching rule, get the target question index
-                  const targetIndex = questionIndexMap[rule.targetId];
-                  
-                  if (targetIndex !== undefined) {
-                    // Find the current question's index
-                    const currentIndex = questionId.startsWith('question-') 
-                      ? parseInt(questionId.replace('question-', ''))
-                      : questionIndexMap[questionId];
-                      
-                    // Navigate to the target question
-                    goToQuestion(currentIndex, targetIndex, totalQuestions);
-                    return; // Exit after applying the first matching rule
-                  }
-                }
-              }
-            }
-          }
-          
-          /**
-           * Hide the current question and show the new one.
-           * currentIndex: index of the question we're leaving
-           * nextIndex: index of the question we want to go to
-           * totalQuestions: total number of questions
-           */
-          function goToQuestion(currentIndex, nextIndex, totalQuestions) {
-            // Hide all questions first
-            for (let i = 0; i < totalQuestions; i++) {
-              document.getElementById("question-" + i).style.display = "none";
-            }
-            
-            // Show the next question if valid index
-            if (nextIndex >= 0 && nextIndex < totalQuestions) {
-              document.getElementById("question-" + nextIndex).style.display = "block";
-            }
-          }
+          // Provide conditional-logic data to the client
+          window.conditionalLogicMap = ${JSON.stringify(conditionalLogicMap)};
+          window.questionIndexMap = ${JSON.stringify(questionIndexMap)};
+          window.totalQuestions = ${formData.questions.length};
         </script>
       </body>
       </html>
     `;
     res.send(pageHtml);
-
   } catch (err) {
     console.error(err);
     res.status(500).send("Failed to load JSON file: " + err);
   }
 });
 
-/**
- * Build the final form HTML from the lines of each page
- * pagesLines is array-of-pages, each item is array of lines (strings)
- */
-function buildForm(formData) {
-  let html = "";
-
-  formData.questions.forEach((question, idx) => {
-    const containerClass = question.type || "unknown_type";
-    // Store the question ID for navigation or use index if no ID provided
-    const questionId = question.id || `question-${idx}`;
-
-    // Only show the first question by default; hide the rest
-    const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
-
-    // Each question has an ID so we can show/hide it
-    html += `<div class="${containerClass}" id="question-${idx}" ${hiddenStyle}>`;
-
-    // Question title
-    html += `<label>${question.title}</label>`;
-
-    // If there's extra 'info', display it
-    if (question.info) {
-      html += `<p>${question.info}</p>`;
-    }
-
-    // Track conditional logic for this question
-    let hasConditionalLogic = question.conditionalLogic && Array.isArray(question.conditionalLogic);
-    let conditionalLogicScript = "";
-
-    // Handle different question types
-    switch (question.type) {
-      case "short_answer":
-        html += `
-          <input
-            type="text"
-            name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""}
-          />
-        `;
-        break;
-
-      case "paragraph":
-        html += `
-          <textarea
-            name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""}
-          ></textarea>
-        `;
-        break;
-
-      case "checkbox":
-        if (Array.isArray(question.options)) {
-          question.options.forEach((option, optIndex) => {
-            html += `
-              <div>
-                <label>
-                  <input
-                    type="radio"
-                    name="${escapeName(question.title)}"
-                    value="${escapeName(option)}"
-                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', '${escapeName(option)}')"` : ""}
-                  />
-                  ${option}
-                </label>
-              </div>
-            `;
-          });
-        }
-        break;
-
-      case "multiple_choice":
-        if (Array.isArray(question.options)) {
-          question.options.forEach((option, optIndex) => {
-            html += `
-              <div>
-                <label>
-                  <input
-                    type="checkbox"
-                    name="${escapeName(question.title)}"
-                    value="${escapeName(option)}"
-                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', '${escapeName(option)}')"` : ""}
-                  />
-                  ${option}
-                </label>
-              </div>
-            `;
-          });
-        }
-        break;
-
-      case "dropdown":
-        html += `
-          <select
-            name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""}
-            ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', this.value)"` : ""}
-          >
-          <option value="">Please select...</option>
-        `;
-        if (Array.isArray(question.options)) {
-          question.options.forEach(option => {
-            html += `
-              <option value="${escapeName(option)}">${option}</option>
-            `;
-          });
-        }
-        html += `</select>`;
-        break;
-
-      default:
-        // Fallback for unknown question types
-        html += `
-          <input
-            type="text"
-            name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""}
-          />
-        `;
-        break;
-    }
-
-    // If not the first question, show a "Back" button
-    if (idx > 0) {
-      html += `
-        <div>
-          <button
-            type="button"
-            onclick="goToQuestion(${idx}, ${idx - 1}, ${formData.questions.length})"
-          >
-            Back
-          </button>
-        </div>
-      `;
-    }
-
-    // If not the last question, show a "Next" button
-    if (idx < formData.questions.length - 1) {
-      html += `
-        <div>
-          <button
-            type="button"
-            onclick="goToQuestion(${idx}, ${idx + 1}, ${formData.questions.length})"
-          >
-            Next
-          </button>
-        </div>
-      `;
-    } else {
-      // Last question gets a "Finish" button (submit)
-      html += `
-        <div>
-          <button type="submit">Finish</button>
-        </div>
-      `;
-    }
-
-    html += `</div>\n`; // close question div
-  });
-
-  return html;
-}
-
-
-// Build a block of radio inputs
-function buildRadio(line) {
-  return `
-    <div class="block">
-      <label>${line}</label>
-      <div>
-        <label><input type="radio" name="${escapeName(line)}" /> Option A</label><br/>
-        <label><input type="radio" name="${escapeName(line)}" /> Option B</label><br/>
-        <label><input type="radio" name="${escapeName(line)}" /> Option C</label>
-      </div>
-    </div>
-  `;
-}
-
-// Build a block of checkbox inputs
-function buildCheckboxes(line) {
-  return `
-    <div class="block">
-      <label>${line}</label>
-      <div>
-        <label><input type="checkbox" name="${escapeName(line)}" /> Option 1</label><br/>
-        <label><input type="checkbox" name="${escapeName(line)}" /> Option 2</label><br/>
-        <label><input type="checkbox" name="${escapeName(line)}" /> Option 3</label>
-      </div>
-    </div>
-  `;
-}
-
-// Build a generic text field or textarea
-function buildTextField(line) {
-  return `
-    <div class="block">
-      <label>${line}</label><br/>
-      <textarea name="${escapeName(line)}"></textarea>
-    </div>
-  `;
-}
-
-// Turn the line into a safe name attribute
-function escapeName(str) {
-  return str
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
-}
-
+/* ------------------------
+   7) SERVER START
+   ------------------------ */
 app.listen(PORT, () => {
   console.log("Server listening on http://localhost:" + PORT);
 });
+
+/* ------------------------
+   HELPER FUNCTIONS
+   ------------------------ */
+   function buildForm(formData) {
+    if (!formData.questions) return "";
+  
+    let html = "";
+  
+    formData.questions.forEach((question, idx) => {
+      // Force a consistent container ID: "question-0", "question-1", etc.
+      const containerId = `question-${idx}`;
+      // Only show the first question; hide the others
+      const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
+  
+      html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
+  
+      // Question title with minimal margin (use .question-title in CSS)
+      html += `<div class="question-title">${question.title}</div>`;
+  
+      // Optional question info (with .question-info to control spacing)
+      if (question.info) {
+        html += `<p class="question-info">${question.info}</p>`;
+      }
+  
+      const hasConditionalLogic = Array.isArray(question.conditionalLogic);
+  
+      // If the question has options...
+      if (Array.isArray(question.options)) {
+        if (question.type === "dropdown") {
+          // Build a <select> element for dropdown type questions
+          html += `<select class="answer-select" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} ${hasConditionalLogic ? `onchange="handleConditionalLogic('${containerId}', this.value)"` : ""}>`;
+          html += `<option value="">Please select...</option>`;
+          question.options.forEach(optionText => {
+            html += `<option value="${escapeName(optionText)}">${optionText}</option>`;
+          });
+          html += `</select>`;
+        } else {
+          // For "checkbox" type (rendered as radios) and "multiple_choice" (rendered as checkboxes)
+          let inputType = "radio"; // default for "checkbox" type
+          if (question.type === "multiple_choice") {
+            inputType = "checkbox";
+          }
+  
+          question.options.forEach((optionText, optIndex) => {
+            // Create a unique ID for the input
+            const uniqueId = `${containerId}-opt${optIndex}`;
+            html += `
+              <div class="answer-option">
+                <label class="answer-box" for="${uniqueId}">
+                  <input
+                    type="${inputType}"
+                    id="${uniqueId}"
+                    name="${escapeName(question.title)}"
+                    value="${escapeName(optionText)}"
+                    ${question.isRequired ? "required" : ""}
+                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${containerId}', '${escapeName(optionText)}')"` : ""}
+                  />
+                  <span>${optionText}</span>
+                </label>
+              </div>
+            `;
+          });
+        }
+      } else {
+        // If there are no options, handle short answer or paragraph type
+        if (question.type === "short_answer") {
+          html += `<input class="answer-text" type="text" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} />`;
+        } else if (question.type === "paragraph") {
+          html += `<textarea class="answer-textarea" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""}></textarea>`;
+        } else {
+          // Fallback text input
+          html += `<input class="answer-text" type="text" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} />`;
+        }
+      }
+  
+      // Navigation Buttons
+      html += `<div class="nav-arrows">`;
+      if (idx > 0) {
+        html += `
+            <button type="button" class="nav-btn subject-btn" onclick="goToQuestion(${idx}, ${idx - 1}, ${formData.questions.length})">
+              ← Back
+            </button>
+          `;
+      }
+  
+      if (idx < formData.questions.length - 1) {
+        html += `
+            <button type="button" class="nav-btn subject-btn" onclick="goToQuestion(${idx}, ${idx + 1}, ${formData.questions.length})">
+              Next →
+            </button>
+          `;
+      } else {
+        html += `
+            <button type="submit" class="nav-btn subject-btn">
+              Finish
+            </button>
+          `;
+      }
+      html += `</div>`; // Close nav-arrows
+  
+      html += `</div>\n`; // Close question-block
+    });
+  
+    return html;
+  }
+  
+  function escapeName(str) {
+    return str
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+  }
+

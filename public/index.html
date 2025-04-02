@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prompt Generator</title>
+  <link rel="stylesheet" href="/style.css">
+  <!-- Include your chosen Google fonts -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&family=Open+Sans:wght@300;400;600;700;800&display=swap">
+  <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+>
+</head>
+<body>
+  <!-- A wrapper to center everything vertically -->
+  <div class="centered-page">
+    <header>
+      <img src="/images/logo.svg" alt="Logo" class="logo">
+    </header>
+
+    <h1 class="prompt-generator">Prompt Generator</h1>
+    <p class="choose-subject-line">Choose your subject</p>
+
+    <div class="qualification-select-container">
+      <!-- The user picks a qualification here -->
+      <select id="qualificationSelect" class="top-level-subject">
+        <option value="">Select a qualification</option>
+      </select>
+    </div>
+
+    <!-- We'll fill this container with subject buttons via script.js -->
+    <div id="subject-container" class="subject-container"></div>
+
+    <div id="form-container"></div>
+  </div>
+
+  <!-- Load your client-side script last -->
+  <script src="/script.js"></script>
+</body>
+</html>
