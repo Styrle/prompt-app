@@ -1,6 +1,5 @@
 {
-  "title": "ATT",
-  "formsData": {
+  "formTitle": "ATT",
     "VAT": [
       {
         "id": "q39",
@@ -9025,4 +9024,3 @@
       }
     ]
   }
-}

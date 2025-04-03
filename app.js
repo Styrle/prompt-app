@@ -129,23 +129,69 @@ app.get("/api/formSnippet", (req, res) => {
     const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
     const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
 
+    // Build a mapping for conditional logic
+    const conditionalLogicMap = {};
+    if (formData.questions) {
+      formData.questions.forEach((question, idx) => {
+        if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
+          // Use the question.id if available, otherwise use the index-based ID
+          const questionId = question.id || `question-${idx}`;
+          conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
+            option: escapeName(logic.option),
+            targetId: logic.goToQuestion
+          }));
+        }
+      });
+    }
+
+    // Map question IDs to array indices
+    const questionIndexMap = {};
+    formData.questions.forEach((question, idx) => {
+      if (question.id) {
+        questionIndexMap[question.id] = idx;
+      }
+      // Always add the index-based mapping as well
+      questionIndexMap[`question-${idx}`] = idx;
+    });
+    
+    console.log("Generated conditionalLogicMap:", JSON.stringify(conditionalLogicMap, null, 2));
+    console.log("Generated questionIndexMap:", JSON.stringify(questionIndexMap, null, 2));
+
     // Build the form HTML
     const formHtml = buildForm(formData);
 
+    // Create a separate script tag with the configuration data
+    // This will be extracted and executed by the client
+    const configScript = `
+      <script>
+        // Direct assignment to window objects
+        window.conditionalLogicMap = ${JSON.stringify(conditionalLogicMap)};
+        window.questionIndexMap = ${JSON.stringify(questionIndexMap)};
+        window.totalQuestions = ${formData.questions.length};
+        
+        console.log("Form configuration loaded via script tag:");
+        console.log("- conditionalLogicMap:", window.conditionalLogicMap);
+        console.log("- questionIndexMap:", window.questionIndexMap);
+        console.log("- totalQuestions:", window.totalQuestions);
+      </script>
+    `;
+
     // Wrap the snippet in a container with minimal styling
+    // Place the script tag BEFORE the form
     const snippet = `
+      ${configScript}
       <div class="styled-form-container">
         <h2>${qualification} ${subject}</h2>
-
         <form>
           ${formHtml}
         </form>
       </div>
     `;
+    
     res.send(snippet);
 
   } catch (err) {
-    console.error(err);
+    console.error("Error generating form snippet:", err);
     res.status(500).send("Failed to load form snippet: " + err);
   }
 });
@@ -256,12 +302,13 @@ app.listen(PORT, () => {
       }
   
       const hasConditionalLogic = Array.isArray(question.conditionalLogic);
+      const questionId = question.id || containerId;
   
       // If the question has options...
       if (Array.isArray(question.options)) {
         if (question.type === "dropdown") {
           // Build a <select> element for dropdown type questions
-          html += `<select class="answer-select" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} ${hasConditionalLogic ? `onchange="handleConditionalLogic('${containerId}', this.value)"` : ""}>`;
+          html += `<select class="answer-select" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', this.value)"` : ""}>`;
           html += `<option value="">Please select...</option>`;
           question.options.forEach(optionText => {
             html += `<option value="${escapeName(optionText)}">${optionText}</option>`;
@@ -286,7 +333,7 @@ app.listen(PORT, () => {
                     name="${escapeName(question.title)}"
                     value="${escapeName(optionText)}"
                     ${question.isRequired ? "required" : ""}
-                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${containerId}', '${escapeName(optionText)}')"` : ""}
+                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', '${escapeName(optionText)}')"` : ""}
                   />
                   <span>${optionText}</span>
                 </label>
