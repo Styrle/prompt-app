@@ -3,6 +3,84 @@
 let currentActiveSubject = null;
 let currentQualification = null;
 
+let questionIndexMap = {};
+let conditionalLogicMap = {};
+let visitedQuestions = [];
+
+async function goToQuestionAsync(currentId, proposedNextId, isBack) {
+  console.log(`[goToQuestion] currentId=${currentId}, proposedNextId=${proposedNextId}, isBack=${isBack}`);
+  console.log(`[goToQuestion] conditionalLogicMap=`, conditionalLogicMap);
+  console.log(`[goToQuestion] questionIndexMap=`, questionIndexMap);
+
+  // 1) Get the DOM for the current question
+  const questionBlock = document.getElementById(currentId);
+  if (!questionBlock) {
+    console.warn(`[goToQuestion] No DOM block for currentId='${currentId}'`);
+    return;
+  }
+
+  // We'll figure out the actual nextId below
+  let nextId = proposedNextId;
+
+  // 2) If user clicked Back, pop from visitedQuestions
+  if (isBack) {
+    if (visitedQuestions.length > 0) {
+      nextId = visitedQuestions.pop();
+      console.log(`[goToQuestion] Going BACK => popped from history => ${nextId}`);
+    } else {
+      console.log(`[goToQuestion] BACK => no history, defaulting to '${proposedNextId}'`);
+    }
+  } else {
+    // 3) If user clicked Next:
+    // Push the current question so we know how to get back here
+    visitedQuestions.push(currentId);
+    console.log(`[goToQuestion] NEXT => pushed '${currentId}' to visitedQuestions`);
+
+    // 3a) Evaluate conditional logic (only when going forward)
+    let selectedValue = null;
+    const inputs = questionBlock.querySelectorAll("input[type=radio], input[type=checkbox], select");
+    console.log(`[goToQuestion] Found ${inputs.length} input(s) in #${currentId}`);
+
+    for (const input of inputs) {
+      // For radio/checkbox
+      if ((input.type === "radio" || input.type === "checkbox") && input.checked) {
+        selectedValue = input.value;
+        console.log(`[goToQuestion] Found checked input value='${selectedValue}'`);
+        break;
+      }
+      // For <select>
+      if (input.tagName.toLowerCase() === "select" && input.value) {
+        selectedValue = input.value;
+        console.log(`[goToQuestion] Found <select> value='${selectedValue}'`);
+        // break if you only need the first <select>
+      }
+    }
+
+    // 3b) If there's a matching logic rule, override nextId
+    const rules = conditionalLogicMap[currentId];
+    console.log(`[goToQuestion] Checking logicMap for '${currentId}':`, rules);
+    if (rules && selectedValue) {
+      const foundRule = rules.find(r => r.option === selectedValue);
+      if (foundRule && foundRule.targetId) {
+        console.log(`[goToQuestion] Overriding nextId => '${foundRule.targetId}' via logic`);
+        nextId = foundRule.targetId;
+      }
+    }
+  }
+
+  // 4) Hide current question
+  questionBlock.style.display = "none";
+
+  // 5) Show the newly determined next question
+  const nextBlock = document.getElementById(nextId);
+  if (!nextBlock) {
+    console.warn(`[goToQuestion] nextBlock not found for '${nextId}'`);
+    return;
+  }
+  nextBlock.style.display = "block";
+
+  console.log(`[goToQuestion] End -> now showing '${nextId}'`);
+}
 
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,63 +88,68 @@ document.addEventListener("DOMContentLoaded", () => {
   const subjectContainer = document.getElementById("subject-container");
   const formContainer = document.getElementById("form-container");
 
-  // 1) fetch qualifications
+  if (typeof window.questionIndexMap !== "undefined") {
+    questionIndexMap = window.questionIndexMap;
+  }
+  if (typeof window.conditionalLogicMap !== "undefined") {
+    conditionalLogicMap = window.conditionalLogicMap;
+  }
+
+  // 1) Fetch qualifications (now returning array of { qualification, title } objects)
   fetch("/api/qualifications")
     .then(res => res.json())
     .then(qualifications => {
       qualifications.forEach(q => {
         const opt = document.createElement("option");
-        opt.value = q;
-        opt.textContent = q;
+        opt.value = q.qualification;  // internal key
+        opt.textContent = q.title;    // friendly title from the JSON
         qualSelect.appendChild(opt);
       });
     })
     .catch(console.error);
 
-  // 2) on change, fetch subjects for that qualification
+  // 2) On change, fetch subjects for that qualification
   qualSelect.addEventListener("change", () => {
     currentQualification = qualSelect.value;
-    const selectedQual = currentQualification;
     formContainer.innerHTML = "";
     currentActiveSubject = null; // reset active subject
-  
-    if (!selectedQual) return;
-  
-    fetch(`/api/subjects?qualification=${encodeURIComponent(selectedQual)}`)
+
+    if (!currentQualification) return;
+
+    fetch(`/api/subjects?qualification=${encodeURIComponent(currentQualification)}`)
       .then(r => r.json())
       .then(subjects => {
-        renderSubjectButtons(subjects); // ✅ call reusable renderer
+        renderSubjectButtons(subjects);
       })
       .catch(console.error);
   });
-  
+
   function renderSubjectButtons(subjects) {
     subjectContainer.innerHTML = "";
-  
+
     subjects.forEach(sub => {
       const btn = document.createElement("button");
       btn.classList.add("subject-btn");
       btn.textContent = sub;
-  
+
       if (sub === currentActiveSubject) {
         btn.classList.add("active");
       }
-  
+
       btn.style.opacity = 0;
       setTimeout(() => {
         btn.style.opacity = 1;
       }, 10);
-  
+
       btn.onclick = () => {
         currentActiveSubject = sub;
         showFormSnippet(currentQualification, sub);
-        renderSubjectButtons(subjects); // 🌀 re-render with updated active state
+        renderSubjectButtons(subjects); // re-render with updated active state
       };
-  
+
       subjectContainer.appendChild(btn);
     });
   }
-  
 
   // 3) showFormSnippet => fetch the snippet & embed it
   function showFormSnippet(qualification, subject) {
@@ -75,11 +158,29 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch(`/api/formSnippet?qualification=${encodeURIComponent(qualification)}&subject=${encodeURIComponent(subject)}`)
       .then(r => r.text())
       .then(snippetHtml => {
+        // Insert the snippet into the DOM
         formContainer.innerHTML = `
           <div class="centered-form-wrapper fade-in">
             ${snippetHtml}
           </div>
         `;
+  
+        // 1) Grab the .styled-form-container you just inserted
+        const containerDiv = formContainer.querySelector(".styled-form-container");
+        if (containerDiv) {
+          // 2) Read the logic data from its data-* attributes
+          try {
+            conditionalLogicMap = JSON.parse(containerDiv.getAttribute("data-logicmap") || "{}");
+            questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
+            window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
+  
+            console.log("Updated logic from snippet:", { conditionalLogicMap, questionIndexMap, totalQuestions });
+          } catch (err) {
+            console.error("Failed to parse snippet data attributes:", err);
+          }
+        }
+  
+        // Smooth-scroll the form into view
         formContainer.scrollIntoView({
           behavior: "smooth",
           block: "center"
@@ -90,46 +191,5 @@ document.addEventListener("DOMContentLoaded", () => {
         formContainer.innerHTML = "<p>Oops, failed to load the form.</p>";
       });
   }
-    
   
 });
-
-
-  window.handleConditionalLogic = function (questionId, selectedValue) {
-    // We rely on the global data that was injected server-side:
-    if (!window.conditionalLogicMap) return;
-    const rules = window.conditionalLogicMap[questionId];
-    if (!rules) return;
-  
-    for (const rule of rules) {
-      if (rule.option === selectedValue) {
-        const targetIndex = window.questionIndexMap[rule.targetId];
-        if (typeof targetIndex !== "undefined") {
-          // Find the current question index
-          let currentIndex = 0;
-          if (questionId.startsWith("question-")) {
-            currentIndex = parseInt(questionId.replace("question-", ""));
-          } else {
-            currentIndex = window.questionIndexMap[questionId];
-          }
-          window.goToQuestion(currentIndex, targetIndex, window.totalQuestions);
-          return;
-        }
-      }
-    }
-  };
-  
-  /** Hide current question, show next. */
-  window.goToQuestion = function (currentIndex, nextIndex, totalQuestions) {
-    for (let i = 0; i < totalQuestions; i++) {
-      const el = document.getElementById(`question-${i}`);
-      if (el) {
-        el.style.display = "none";
-      }
-    }
-    const nextEl = document.getElementById(`question-${nextIndex}`);
-    if (nextEl) {
-      nextEl.style.display = "block";
-    }
-  };
-  
