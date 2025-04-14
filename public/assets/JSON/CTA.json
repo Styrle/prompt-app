@@ -1,6 +1,5 @@
 {
-  "title": "CTA",
-  "formsData": {
+  "formTitle": "CTA",
     "VAT and Stamp Taxes (Awareness)": [
       {
         "id": "q39",
@@ -27035,4 +27034,3 @@
       }
     ]
   }
-}

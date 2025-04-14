@@ -1,6 +1,5 @@
 {
-  "title": "CIMA",
-  "formsData": {
+  "formTitle": "CIMA",
     "BA4": [
       {
         "id": "q39",
@@ -32543,4 +32542,3 @@
       }
     ]
   }
-}

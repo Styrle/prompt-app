@@ -154,6 +154,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // 3) showFormSnippet => fetch the snippet & embed it
   function showFormSnippet(qualification, subject) {
     formContainer.innerHTML = "";
+    
+    // Clear any previous form data when loading a new form
+    window.conditionalLogicMap = {};
+    window.questionIndexMap = {};
+    window.totalQuestions = 0;
   
     fetch(`/api/formSnippet?qualification=${encodeURIComponent(qualification)}&subject=${encodeURIComponent(subject)}`)
       .then(r => r.text())
