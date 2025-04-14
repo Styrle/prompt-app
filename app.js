@@ -145,69 +145,60 @@ app.get("/api/formSnippet", (req, res) => {
     console.log(`[formSnippet] Loading form data from: ${jsonPath}`);
     const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
 
-    // Build a mapping for conditional logic
-    const conditionalLogicMap = {};
-    if (formData.questions) {
-      formData.questions.forEach((question, idx) => {
-        if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
-          // Use the question.id if available, otherwise use the index-based ID
-          const questionId = question.id || `question-${idx}`;
-          conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
-            option: escapeName(logic.option),
-            targetId: logic.goToQuestion
-          }));
-        }
-      });
-    }
+    // Log how many questions we have
+    console.log(`[formSnippet] formData has ${formData.questions.length} questions.`);
 
-    // Map question IDs to array indices
+    const formHtml = buildForm(formData);
+
+    // Build conditionalLogicMap
+    const conditionalLogicMap = {};
+
+    formData.questions.forEach((question, idx) => {
+      // For debugging: print each question ID and whether conditionalLogic is present
+      console.log(`[formSnippet] Question #${idx} => id='${question.id}' has conditionalLogic=`, question.conditionalLogic);
+
+      if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
+        const questionId = question.id || `question-${idx}`;
+        console.log(`[formSnippet] Building logicMap entry for '${questionId}'...`);
+
+        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => {
+          const escapedOpt = escapeName(logic.option);
+          console.log(`  Option='${logic.option}' => escaped='${escapedOpt}', goTo='${logic.goToQuestion}'`);
+          return {
+            option: escapedOpt,
+            targetId: logic.goToQuestion
+          };
+        });
+      }
+    });
+
+    // Build questionIndexMap
     const questionIndexMap = {};
+
     formData.questions.forEach((question, idx) => {
       if (question.id) {
         questionIndexMap[question.id] = idx;
       }
-      // Always add the index-based mapping as well
-      questionIndexMap[`question-${idx}`] = idx;
     });
-    
-    console.log("Generated conditionalLogicMap:", JSON.stringify(conditionalLogicMap, null, 2));
-    console.log("Generated questionIndexMap:", JSON.stringify(questionIndexMap, null, 2));
 
-    // Build the form HTML
-    const formHtml = buildForm(formData);
-
-    // Create a separate script tag with the configuration data
-    // This will be extracted and executed by the client
-    const configScript = `
-      <script>
-        // Direct assignment to window objects
-        window.conditionalLogicMap = ${JSON.stringify(conditionalLogicMap)};
-        window.questionIndexMap = ${JSON.stringify(questionIndexMap)};
-        window.totalQuestions = ${formData.questions.length};
-        
-        console.log("Form configuration loaded via script tag:");
-        console.log("- conditionalLogicMap:", window.conditionalLogicMap);
-        console.log("- questionIndexMap:", window.questionIndexMap);
-        console.log("- totalQuestions:", window.totalQuestions);
-      </script>
-    `;
-
-    // Wrap the snippet in a container with minimal styling
-    // Place the script tag BEFORE the form
+    // Wrap snippet
     const snippet = `
-      ${configScript}
-      <div class="styled-form-container">
-        <h2>${qualification} ${subject}</h2>
-        <form>
-          ${formHtml}
-        </form>
-      </div>
-    `;
-    
+    <div class="styled-form-container"
+         data-logicmap='${JSON.stringify(conditionalLogicMap)}'
+         data-questionindexmap='${JSON.stringify(questionIndexMap)}'
+         data-totalquestions='${formData.questions.length}'>
+      <h2>${qualification} ${subject}</h2>
+      <form>
+        ${formHtml}
+      </form>
+    </div>
+  `;
+
+    console.log(`[formSnippet] Finished building snippet. conditionalLogicMap=`, conditionalLogicMap);
     res.send(snippet);
 
   } catch (err) {
-    console.error("Error generating form snippet:", err);
+    console.error(`[formSnippet] Failed to load form snippet:`, err);
     res.status(500).send("Failed to load form snippet: " + err);
   }
 });
@@ -315,15 +306,12 @@ app.listen(PORT, () => {
         html += `<p class="question-info">${question.info}</p>`;
       }
   
-      const hasConditionalLogic = Array.isArray(question.conditionalLogic);
-      const questionId = question.id || containerId;
-  
-      // If the question has options...
+      // Render inputs
       if (Array.isArray(question.options)) {
         if (question.type === "dropdown") {
-          // Build a <select> element for dropdown type questions
-          html += `<select class="answer-select" name="${escapeName(question.title)}" ${question.isRequired ? "required" : ""} ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', this.value)"` : ""}>`;
-          html += `<option value="">Please select...</option>`;
+          html += `<select class="answer-select" name="${escapeName(question.title)}"
+                       ${question.isRequired ? "required" : ""}>
+                     <option value="">Please select...</option>`;
           question.options.forEach(optionText => {
             html += `<option value="${escapeName(optionText)}">${optionText}</option>`;
           });
@@ -347,7 +335,6 @@ app.listen(PORT, () => {
                     name="${escapeName(question.title)}"
                     value="${escapeName(optionText)}"
                     ${question.isRequired ? "required" : ""}
-                    ${hasConditionalLogic ? `onchange="handleConditionalLogic('${questionId}', '${escapeName(optionText)}')"` : ""}
                   />
                   <span>${optionText}</span>
                 </label>
