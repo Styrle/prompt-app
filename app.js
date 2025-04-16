@@ -141,40 +141,69 @@ app.get("/api/formSnippet", (req, res) => {
   }
 
   try {
+    // Always load form.json (this contains the base questions)
     const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
-    console.log(`[formSnippet] Loading form data from: ${jsonPath}`);
+    console.log(`[formSnippet] Loading base form data from: ${jsonPath}`);
     const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+    
+    // Also load qualification-specific data
+    let qualData = null;
+    
+    if (qualification && qualification !== "default") {
+      // Find the JSON file for this qualification
+      const qualJsonFile = qualificationMap[qualification] && 
+                          Object.values(qualificationMap[qualification])
+                            .find(filename => filename.endsWith('.json'));
+      
+      if (qualJsonFile) {
+        // Path to the qualification-specific JSON
+        const qualJsonPath = path.join(__dirname, "public/assets/JSON", qualJsonFile);
+        console.log(`[formSnippet] Loading qualification data from: ${qualJsonPath}`);
+        
+        // Load the qualification's JSON data
+        qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
+        
+        // Look for the subject-specific form data
+        const subjectKey = Object.keys(qualData.formsData || {}).find(
+          key => key === subject || key.toLowerCase() === subject.toLowerCase()
+        );
+        
+        if (subjectKey && qualData.formsData[subjectKey]) {
+          const subjectFormData = qualData.formsData[subjectKey];
+          console.log(`[formSnippet] Found ${subjectFormData.length} subject-specific questions`);
+          
+          // Append subject-specific questions to the form data
+          formData.questions = formData.questions.concat(subjectFormData);
+          console.log(`[formSnippet] Combined form now has ${formData.questions.length} questions`);
+        }
+      }
+    }
+
+    // Load prompt.json so we can display it at Q38
+    const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
+    const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
     // Log how many questions we have
     console.log(`[formSnippet] formData has ${formData.questions.length} questions.`);
 
-    const formHtml = buildForm(formData);
+    // Build the form HTML, passing promptData so we can show it at Q38
+    const formHtml = buildForm(formData, promptData);
 
     // Build conditionalLogicMap
     const conditionalLogicMap = {};
 
     formData.questions.forEach((question, idx) => {
-      // For debugging: print each question ID and whether conditionalLogic is present
-      console.log(`[formSnippet] Question #${idx} => id='${question.id}' has conditionalLogic=`, question.conditionalLogic);
-
       if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
         const questionId = question.id || `question-${idx}`;
-        console.log(`[formSnippet] Building logicMap entry for '${questionId}'...`);
-
-        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => {
-          const escapedOpt = escapeName(logic.option);
-          console.log(`  Option='${logic.option}' => escaped='${escapedOpt}', goTo='${logic.goToQuestion}'`);
-          return {
-            option: escapedOpt,
-            targetId: logic.goToQuestion
-          };
-        });
+        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
+          option: escapeName(logic.option),
+          targetId: logic.goToQuestion
+        }));
       }
     });
 
     // Build questionIndexMap
     const questionIndexMap = {};
-
     formData.questions.forEach((question, idx) => {
       if (question.id) {
         questionIndexMap[question.id] = idx;
@@ -194,7 +223,6 @@ app.get("/api/formSnippet", (req, res) => {
     </div>
   `;
 
-    console.log(`[formSnippet] Finished building snippet. conditionalLogicMap=`, conditionalLogicMap);
     res.send(snippet);
 
   } catch (err) {
@@ -285,16 +313,16 @@ app.listen(PORT, () => {
 /* ------------------------
    HELPER FUNCTIONS
    ------------------------ */
-   function buildForm(formData) {
+   function buildForm(formData, promptData) {
     if (!formData.questions) return "";
     let html = "";
   
-    // Create an array of question IDs (just in case we want it)
+    // Create an array of question IDs
     const questionIds = formData.questions.map(q => q.id);
     console.log(`[buildForm] Generating HTML. Found questionIds=`, questionIds);
   
     formData.questions.forEach((question, idx) => {
-      const containerId = question.id;
+      const containerId = question.id || `question-${idx}`;
       const hiddenStyle = (idx === 0) ? "" : 'style="display:none;"';
   
       console.log(`[buildForm] Creating DOM block for id='${containerId}'`);
@@ -349,25 +377,39 @@ app.listen(PORT, () => {
           html += `<textarea class="answer-textarea" name="${escapeName(question.title)}"
             ${question.isRequired ? "required" : ""}></textarea>`;
         } else {
+          // fallback
           html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
             ${question.isRequired ? "required" : ""} />`;
         }
       }
   
+      // If this is Q38 (the end), show the text from prompt.json in a textarea
+      if (question.id === "q38" && promptData && promptData.description) {
+        html += `
+          <div style="margin-top: 20px;">
+            <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+              Final Prompt
+            </label>
+            <textarea rows="10" cols="80" style="width: 100%;">
+  ${promptData.description}</textarea>
+          </div>
+        `;
+      }
+  
       // Nav arrows
       html += `<div class="nav-arrows">`;
+  
       if (idx > 0) {
-        const prevId = formData.questions[idx - 1].id;
-        // Pass true as the third argument for the Back button
+        const prevId = formData.questions[idx - 1].id || `question-${idx - 1}`;
         html += `
           <button type="button" class="nav-btn subject-btn"
                   onclick="goToQuestionAsync('${containerId}', '${prevId}', true)">
             ← Back
           </button>`;
       }
+  
       if (idx < formData.questions.length - 1) {
-        const nextId = formData.questions[idx + 1].id;
-        // Pass false as the third argument for the Next button
+        const nextId = formData.questions[idx + 1].id || `question-${idx + 1}`;
         html += `
           <button type="button" class="nav-btn subject-btn"
                   onclick="goToQuestionAsync('${containerId}', '${nextId}', false)">
@@ -379,16 +421,19 @@ app.listen(PORT, () => {
             Finish
           </button>`;
       }
+  
       html += `</div></div>\n`;
     });
   
     return html;
-  }  
+  }
   
-
-function escapeName(str) {
-  return str
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
-}
+  /**
+   * Escape function for names
+   */
+  function escapeName(str) {
+    return str
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+  }  

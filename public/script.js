@@ -7,6 +7,89 @@ let questionIndexMap = {};
 let conditionalLogicMap = {};
 let visitedQuestions = [];
 
+function showFormSnippet(qualification, subject) {
+  const formContainer = document.getElementById("form-container");
+  if (!formContainer) {
+    console.error("[showFormSnippet] Cannot find form-container element!");
+    return Promise.reject(new Error("Form container not found"));
+  }
+  
+  formContainer.innerHTML = "";
+  
+  // Reset visited questions when starting a new form with a new subject
+  const isNewSubjectSelection = currentActiveSubject !== subject;
+  if (isNewSubjectSelection) {
+    visitedQuestions = [];
+  }
+  
+  // Show loading indicator
+  formContainer.innerHTML = `
+    <div class="centered-form-wrapper fade-in">
+      <div class="styled-form-container">
+        <h2>Loading ${qualification} ${subject}...</h2>
+      </div>
+    </div>
+  `;
+
+  // Build the URL with qualification and subject parameters
+  let url = `/api/formSnippet?qualification=${encodeURIComponent(qualification)}&subject=${encodeURIComponent(subject)}`;
+
+  return fetch(url)
+    .then(r => {
+      if (!r.ok) {
+        return r.text().then(errorText => {
+          throw new Error(`Failed to load form: ${errorText}`);
+        });
+      }
+      return r.text();
+    })
+    .then(snippetHtml => {
+      // Insert the snippet into the DOM
+      formContainer.innerHTML = `
+        <div class="centered-form-wrapper fade-in">
+          ${snippetHtml}
+        </div>
+      `;
+
+      // 1) Grab the .styled-form-container you just inserted
+      const containerDiv = formContainer.querySelector(".styled-form-container");
+      if (containerDiv) {
+        // 2) Read the logic data from its data-* attributes
+        try {
+          conditionalLogicMap = JSON.parse(containerDiv.getAttribute("data-logicmap") || "{}");
+          questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
+          window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
+
+          console.log("[showFormSnippet] Updated logic from snippet:", 
+            { 
+              mapSize: Object.keys(conditionalLogicMap).length,
+              questionCount: window.totalQuestions
+            });
+        } catch (err) {
+          console.error("[showFormSnippet] Failed to parse snippet data attributes:", err);
+        }
+      }
+
+      // Smooth-scroll the form into view
+      formContainer.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    })
+    .catch(err => {
+      console.error("Error loading form snippet:", err);
+      formContainer.innerHTML = `
+        <div class="centered-form-wrapper fade-in">
+          <div class="styled-form-container">
+            <h2>Error</h2>
+            <p>Oops, failed to load the form: ${err.message}</p>
+            <button class="nav-btn subject-btn" onclick="history.back()">Go Back</button>
+          </div>
+        </div>
+      `;
+    });
+}
+
 async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   console.log(`[goToQuestion] currentId=${currentId}, proposedNextId=${proposedNextId}, isBack=${isBack}`);
   console.log(`[goToQuestion] conditionalLogicMap=`, conditionalLogicMap);
@@ -82,7 +165,6 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   console.log(`[goToQuestion] End -> now showing '${nextId}'`);
 }
 
-
 document.addEventListener("DOMContentLoaded", () => {
   const qualSelect = document.getElementById("qualificationSelect");
   const subjectContainer = document.getElementById("subject-container");
@@ -150,46 +232,4 @@ document.addEventListener("DOMContentLoaded", () => {
       subjectContainer.appendChild(btn);
     });
   }
-
-  // 3) showFormSnippet => fetch the snippet & embed it
-  function showFormSnippet(qualification, subject) {
-    formContainer.innerHTML = "";
-  
-    fetch(`/api/formSnippet?qualification=${encodeURIComponent(qualification)}&subject=${encodeURIComponent(subject)}`)
-      .then(r => r.text())
-      .then(snippetHtml => {
-        // Insert the snippet into the DOM
-        formContainer.innerHTML = `
-          <div class="centered-form-wrapper fade-in">
-            ${snippetHtml}
-          </div>
-        `;
-  
-        // 1) Grab the .styled-form-container you just inserted
-        const containerDiv = formContainer.querySelector(".styled-form-container");
-        if (containerDiv) {
-          // 2) Read the logic data from its data-* attributes
-          try {
-            conditionalLogicMap = JSON.parse(containerDiv.getAttribute("data-logicmap") || "{}");
-            questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
-            window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
-  
-            console.log("Updated logic from snippet:", { conditionalLogicMap, questionIndexMap, totalQuestions });
-          } catch (err) {
-            console.error("Failed to parse snippet data attributes:", err);
-          }
-        }
-  
-        // Smooth-scroll the form into view
-        formContainer.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
-      })
-      .catch(err => {
-        console.error("Error loading form snippet:", err);
-        formContainer.innerHTML = "<p>Oops, failed to load the form.</p>";
-      });
-  }
-  
 });
