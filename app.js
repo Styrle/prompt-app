@@ -141,40 +141,25 @@ app.get("/api/formSnippet", (req, res) => {
   }
 
   try {
-    // Always load form.json (this contains the base questions)
+    // Load form.json (base questions)
     const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
     console.log(`[formSnippet] Loading base form data from: ${jsonPath}`);
     const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
     
-    // Also load qualification-specific data
-    let qualData = null;
-    
-    if (qualification && qualification !== "default") {
-      // Find the JSON file for this qualification
-      const qualJsonFile = qualificationMap[qualification] && 
-                          Object.values(qualificationMap[qualification])
-                            .find(filename => filename.endsWith('.json'));
-      
+    // Also load qualification-specific data if any
+    if (qualification !== "default") {
+      const qualJsonFile = qualificationMap[qualification] &&
+        Object.values(qualificationMap[qualification]).find(filename => filename.endsWith(".json"));
+
       if (qualJsonFile) {
-        // Path to the qualification-specific JSON
         const qualJsonPath = path.join(__dirname, "public/assets/JSON", qualJsonFile);
-        console.log(`[formSnippet] Loading qualification data from: ${qualJsonPath}`);
-        
-        // Load the qualification's JSON data
-        qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
-        
-        // Look for the subject-specific form data
+        const qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
+
         const subjectKey = Object.keys(qualData.formsData || {}).find(
           key => key === subject || key.toLowerCase() === subject.toLowerCase()
         );
-        
         if (subjectKey && qualData.formsData[subjectKey]) {
-          const subjectFormData = qualData.formsData[subjectKey];
-          console.log(`[formSnippet] Found ${subjectFormData.length} subject-specific questions`);
-          
-          // Append subject-specific questions to the form data
-          formData.questions = formData.questions.concat(subjectFormData);
-          console.log(`[formSnippet] Combined form now has ${formData.questions.length} questions`);
+          formData.questions = formData.questions.concat(qualData.formsData[subjectKey]);
         }
       }
     }
@@ -183,15 +168,18 @@ app.get("/api/formSnippet", (req, res) => {
     const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
     const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
-    // Log how many questions we have
-    console.log(`[formSnippet] formData has ${formData.questions.length} questions.`);
+    // For now, we do NOT attempt to figure out which q3 answer was selected server-side 
+    // (because we won’t know the user’s selection at this point). Instead, 
+    // we pass prompt.json (particularly the q3 array) down to the client side via data attributes.
 
-    // Build the form HTML, passing promptData so we can show it at Q38
-    const formHtml = buildForm(formData, promptData);
+    // We'll pass the entire q3 array to the front end:
+    const q3Array = promptData.q3 || [];
+
+    // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
+    const formHtml = buildForm(formData /* no second arg for finalPromptText now */);
 
     // Build conditionalLogicMap
     const conditionalLogicMap = {};
-
     formData.questions.forEach((question, idx) => {
       if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
         const questionId = question.id || `question-${idx}`;
@@ -210,12 +198,13 @@ app.get("/api/formSnippet", (req, res) => {
       }
     });
 
-    // Wrap snippet
+    // Wrap snippet, embedding q3 array in data-q3prompts
     const snippet = `
     <div class="styled-form-container"
          data-logicmap='${JSON.stringify(conditionalLogicMap)}'
          data-questionindexmap='${JSON.stringify(questionIndexMap)}'
-         data-totalquestions='${formData.questions.length}'>
+         data-totalquestions='${formData.questions.length}'
+         data-q3prompts='${JSON.stringify(q3Array)}'>
       <h2>${qualification} ${subject}</h2>
       <form>
         ${formHtml}
@@ -313,19 +302,13 @@ app.listen(PORT, () => {
 /* ------------------------
    HELPER FUNCTIONS
    ------------------------ */
-   function buildForm(formData, promptData) {
+   function buildForm(formData) {
     if (!formData.questions) return "";
     let html = "";
-  
-    // Create an array of question IDs
-    const questionIds = formData.questions.map(q => q.id);
-    console.log(`[buildForm] Generating HTML. Found questionIds=`, questionIds);
   
     formData.questions.forEach((question, idx) => {
       const containerId = question.id || `question-${idx}`;
       const hiddenStyle = (idx === 0) ? "" : 'style="display:none;"';
-  
-      console.log(`[buildForm] Creating DOM block for id='${containerId}'`);
   
       html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
       html += `<div class="question-title">${question.title}</div>`;
@@ -345,13 +328,7 @@ app.listen(PORT, () => {
           });
           html += `</select>`;
         } else {
-          let inputType;
-          if (question.type === "checkbox") {
-            inputType = "checkbox";
-          } else {
-            // for "multiple_choice" or anything else, default to radio
-            inputType = "radio";
-          }
+          let inputType = (question.type === "checkbox") ? "checkbox" : "radio";
           question.options.forEach((optionText, optIndex) => {
             const uniqueId = `${containerId}-opt${optIndex}`;
             html += `
@@ -383,22 +360,21 @@ app.listen(PORT, () => {
         }
       }
   
-      // If this is Q38 (the end), show the text from prompt.json in a textarea
-      if (question.id === "q38" && promptData && promptData.description) {
+      // If this is Q38, we’ll let the frontend decide how to fill the textarea 
+      // based on the user’s earlier choices. So just add an empty <textarea> for now:
+      if (question.id === "q38") {
         html += `
           <div style="margin-top: 20px;">
             <label style="font-weight: bold; display: block; margin-bottom: 5px;">
               Final Prompt
             </label>
-            <textarea rows="10" cols="80" style="width: 100%;">
-  ${promptData.description}</textarea>
+            <textarea id="final-prompt-textarea" rows="10" cols="80" style="width: 100%;"></textarea>
           </div>
         `;
       }
   
       // Nav arrows
       html += `<div class="nav-arrows">`;
-  
       if (idx > 0) {
         const prevId = formData.questions[idx - 1].id || `question-${idx - 1}`;
         html += `
@@ -407,7 +383,6 @@ app.listen(PORT, () => {
             ← Back
           </button>`;
       }
-  
       if (idx < formData.questions.length - 1) {
         const nextId = formData.questions[idx + 1].id || `question-${idx + 1}`;
         html += `
@@ -421,19 +396,15 @@ app.listen(PORT, () => {
             Finish
           </button>`;
       }
-  
       html += `</div></div>\n`;
     });
   
     return html;
   }
   
-  /**
-   * Escape function for names
-   */
   function escapeName(str) {
     return str
       .toLowerCase()
       .replace(/\s+/g, "_")
       .replace(/[^a-z0-9_]/g, "");
-  }  
+  }

@@ -7,6 +7,12 @@ let questionIndexMap = {};
 let conditionalLogicMap = {};
 let visitedQuestions = [];
 
+// Store user’s final chosen Q3 prompt from prompt.json
+let selectedQ3PromptText = "";  
+
+// Possibly store the # of marks from q4 if relevant
+let writtenTestMarks = "";
+
 function showFormSnippet(qualification, subject) {
   const formContainer = document.getElementById("form-container");
   if (!formContainer) {
@@ -54,17 +60,14 @@ function showFormSnippet(qualification, subject) {
       // 1) Grab the .styled-form-container you just inserted
       const containerDiv = formContainer.querySelector(".styled-form-container");
       if (containerDiv) {
-        // 2) Read the logic data from its data-* attributes
         try {
           conditionalLogicMap = JSON.parse(containerDiv.getAttribute("data-logicmap") || "{}");
           questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
           window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
-
-          console.log("[showFormSnippet] Updated logic from snippet:", 
-            { 
-              mapSize: Object.keys(conditionalLogicMap).length,
-              questionCount: window.totalQuestions
-            });
+          
+          // This is where we store the possible q3 prompts from prompt.json
+          window.q3Prompts = JSON.parse(containerDiv.getAttribute("data-q3prompts") || "[]");
+          console.log("[showFormSnippet] q3Prompts =", window.q3Prompts);
         } catch (err) {
           console.error("[showFormSnippet] Failed to parse snippet data attributes:", err);
         }
@@ -90,58 +93,90 @@ function showFormSnippet(qualification, subject) {
     });
 }
 
+let userQuestionText = "";
+let userAnswerText = "";
+
 async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   console.log(`[goToQuestion] currentId=${currentId}, proposedNextId=${proposedNextId}, isBack=${isBack}`);
-  console.log(`[goToQuestion] conditionalLogicMap=`, conditionalLogicMap);
-  console.log(`[goToQuestion] questionIndexMap=`, questionIndexMap);
+  console.log("[goToQuestion] conditionalLogicMap=", conditionalLogicMap);
+  console.log("[goToQuestion] questionIndexMap=", questionIndexMap);
 
-  // 1) Get the DOM for the current question
   const questionBlock = document.getElementById(currentId);
   if (!questionBlock) {
     console.warn(`[goToQuestion] No DOM block for currentId='${currentId}'`);
     return;
   }
 
-  // We'll figure out the actual nextId below
   let nextId = proposedNextId;
 
-  // 2) If user clicked Back, pop from visitedQuestions
   if (isBack) {
     if (visitedQuestions.length > 0) {
       nextId = visitedQuestions.pop();
-      console.log(`[goToQuestion] Going BACK => popped from history => ${nextId}`);
-    } else {
-      console.log(`[goToQuestion] BACK => no history, defaulting to '${proposedNextId}'`);
+      console.log(`[goToQuestion] BACK => popped from history => '${nextId}'`);
     }
   } else {
-    // 3) If user clicked Next:
-    // Push the current question so we know how to get back here
     visitedQuestions.push(currentId);
-    console.log(`[goToQuestion] NEXT => pushed '${currentId}' to visitedQuestions`);
+    console.log(`[goToQuestion] FORWARD => pushed '${currentId}' to visitedQuestions`);
 
-    // 3a) Evaluate conditional logic (only when going forward)
+    // 1) Determine which input was selected (if radio/checkbox or select)
     let selectedValue = null;
     const inputs = questionBlock.querySelectorAll("input[type=radio], input[type=checkbox], select");
-    console.log(`[goToQuestion] Found ${inputs.length} input(s) in #${currentId}`);
-
     for (const input of inputs) {
-      // For radio/checkbox
       if ((input.type === "radio" || input.type === "checkbox") && input.checked) {
         selectedValue = input.value;
-        console.log(`[goToQuestion] Found checked input value='${selectedValue}'`);
         break;
       }
-      // For <select>
       if (input.tagName.toLowerCase() === "select" && input.value) {
         selectedValue = input.value;
-        console.log(`[goToQuestion] Found <select> value='${selectedValue}'`);
-        // break if you only need the first <select>
+      }
+    }
+    console.log(`[goToQuestion] selectedValue='${selectedValue}' at question='${currentId}'`);
+
+    // 2) If user just answered Q3 => pick the matching prompt text
+    if (currentId === "q3" && selectedValue) {
+      let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
+      plainChoice = plainChoice.replace(/[()]/g, "").trim();
+      console.log(`[goToQuestion] Q3 plainChoice='${plainChoice}'. Checking in window.q3Prompts:`, window.q3Prompts);
+
+      const foundObj = (window.q3Prompts || []).find(obj => {
+        let normalized = obj.answer.toLowerCase().replace(/[()]/g, "").trim();
+        console.log("Comparing => user:", plainChoice, "<==> prompt.json:", normalized);
+        return normalized === plainChoice;
+      });
+
+      if (foundObj) {
+        console.log("[goToQuestion] Found matching q3 prompt:", foundObj.description);
+        selectedQ3PromptText = foundObj.description;
+      } else {
+        console.warn("[goToQuestion] No match found for q3 => final prompt will be blank!");
+        selectedQ3PromptText = "";
       }
     }
 
-    // 3b) If there's a matching logic rule, override nextId
+    // 3) If user just answered Q4 => store the marks
+    if (currentId === "q4") {
+      const inputEl = questionBlock.querySelector("textarea, input[type=text]");
+      writtenTestMarks = inputEl ? inputEl.value.trim() : "";
+      console.log("[goToQuestion] User typed marks =>", writtenTestMarks);
+    }
+
+    // 4) If user just answered Q29 => store the "Question" text
+    if (currentId === "q29") {
+      const inputEl = questionBlock.querySelector("textarea, input[type=text]");
+      userQuestionText = inputEl ? inputEl.value.trim() : "";
+      console.log("[goToQuestion] User typed a 'Question' =>", userQuestionText);
+    }
+
+    // 5) If user just answered Q30 => store the "Answer" text
+    if (currentId === "q30") {
+      const inputEl = questionBlock.querySelector("textarea, input[type=text]");
+      userAnswerText = inputEl ? inputEl.value.trim() : "";
+      console.log("[goToQuestion] User typed an 'Answer' =>", userAnswerText);
+    }
+
+    // 6) Evaluate conditional logic to find nextId
     const rules = conditionalLogicMap[currentId];
-    console.log(`[goToQuestion] Checking logicMap for '${currentId}':`, rules);
+    console.log("[goToQuestion] Checking logicMap for currentId:", rules);
     if (rules && selectedValue) {
       const foundRule = rules.find(r => r.option === selectedValue);
       if (foundRule && foundRule.targetId) {
@@ -151,10 +186,10 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     }
   }
 
-  // 4) Hide current question
+  // Hide current question
   questionBlock.style.display = "none";
 
-  // 5) Show the newly determined next question
+  // Show next question
   const nextBlock = document.getElementById(nextId);
   if (!nextBlock) {
     console.warn(`[goToQuestion] nextBlock not found for '${nextId}'`);
@@ -162,7 +197,40 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   }
   nextBlock.style.display = "block";
 
-  console.log(`[goToQuestion] End -> now showing '${nextId}'`);
+  // 7) If Q38 => fill final prompt
+  if (nextId === "q38") {
+    console.log("[goToQuestion] Reached Q38 => building final prompt");
+    const finalTextarea = document.getElementById("final-prompt-textarea");
+    if (finalTextarea) {
+      let finalPrompt = selectedQ3PromptText;
+
+      // Insert the # of marks if q4 was answered
+      if (writtenTestMarks) {
+        finalPrompt = finalPrompt.replace(/<WTQ marks>/g, writtenTestMarks);
+      }
+
+      // Replace <qualification> and <topic> if desired
+      if (currentQualification) {
+        finalPrompt = finalPrompt.replace(/<qualification>/g, currentQualification);
+      }
+      if (currentActiveSubject) {
+        finalPrompt = finalPrompt.replace(/<topic>/g, currentActiveSubject);
+      }
+
+      // 8) Now replace <Question> and <Answer> from q29 & q30
+      if (userQuestionText) {
+        finalPrompt = finalPrompt.replace(/<Question>/g, userQuestionText);
+      }
+      if (userAnswerText) {
+        finalPrompt = finalPrompt.replace(/<Answer>/g, userAnswerText);
+      }
+
+      console.log("[goToQuestion] Final prompt being inserted:", finalPrompt);
+      finalTextarea.value = finalPrompt;
+    }
+  }
+
+  console.log(`[goToQuestion] Now showing '${nextId}'`);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

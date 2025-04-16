@@ -27,11 +27,11 @@
       "conditionalLogic": [
         {
           "option": "Questions (Produce OT or Written test)",
-          "goToQuestion": "q39"
+          "goToQuestion": "q3"
         },
         {
           "option": "Video scripts (Generic , VOPP, introduction to learning module or question debrief)",
-          "goToQuestion": "q38"
+          "goToQuestion": "q6"
         },
         {
           "option": "Written material (text) from scratch",

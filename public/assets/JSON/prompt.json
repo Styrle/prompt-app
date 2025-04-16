@@ -1,5 +1,43 @@
 {
     "formTitle": "Final output",
-    "description": "Hi Kaplan GPT, Please write <number of questions>, <qualification>-style <question type> suitable for an accountancy and finance <apprenticeship level> apprenticeship on the topic of <topic>. **Requirements**: *Question Format*: 1. Write a question but vary how it is tested each time. 2. Use culturally diverse names and a variety of different businesses. 3. Use 'python software' where calculations are required but do not refer to python software in your output. 4. For calculations, use a 'chain of thought' approach. 5. Show negative numbers in brackets, e.g., (£1,000). 6. The question should have a scenario of around <number of words> words. 7. Distractors must be plausible. The questions should be <style>. \nIt is very important that you only provide questions of the specific type requested. \nGuidance on different styles of objective test question: \nMultiple Choice: 4 answer options, only one correct. \nSelect Two from Five: 5 answer options, two correct. \nSelect All That Apply: 4 answer options, any number from 1 to 4 can be correct. \n\nSpecific type of question required: \nOn this occasion restrict your output to '<testing>' style objective test questions. \nYou must only produce output for this style of question. \n\n*Solution Format*: \n1. Provide the correct answer. \n2. Explain why the correct answer is correct. \n3. Justify why the wrong answers are incorrect. \n4. Do not truncate the output. \n5. Apply the additional detail as described below in 'Additional Instructions' to each question individually. \n\n*Additional Instructions*: \n<British values> \n<KSB's> \n<Functional skills>"
-
+    "q3": [
+        {
+            "answer": "Objective test questions",
+            "description": "Hi Kaplan GPT, Please create <num> objective test questions on <topic>, suitable for an apprentice at <qualification>. Use a chain-of-thought approach and do not truncate your output."
+          },
+        {
+    "answer": "Written test question (from scratch)",
+    "description": "Hi Kaplan GPT, Please produce a written test question worth <WTQ marks> marks on the topic of <topic>. This question should be aimed at a learner studying <qualification>, <paper>. Please also supply a comprehensive answer. Note: The number of minutes available to a student per mark is <minutes per mark>. Do not truncate your output."
+        },
+        {
+        "answer": "Written test question (from existing)",
+        "description": "Hi Kaplan GPT. Please produce a question and answer of a similar style and standard as the question and answer included below on the topic of <topic>. Do not truncate your output. Question to model your questions on: <Question> Answer to model your answers on: <Answer>"
+        }
+    ],
+    "q6": [
+        {
+            "answer": "Produce generic video script",
+            "description": "Example the 'original text' below: <part> Please also identify the appropriate on-screen narrative to support the script. Your script must have the following characteristics: *Be engaging *Be targeted at a learner studying <qualification> <paper> *Be professional in tone *Be in 'British English' You should include relevant real-world examples in the script if possible. Please ensure the script is appropriate for a professional-level qualification, it should not include magical adventures or story-based plots. Assume that this video appears in the middle of a session so there is no need for an intro or summary. \nAssume that this video is for existing students so don't encourage them to subscribe.  \nIf possible, keep sentences below 15 words in order to make the use of autocues easier for the presenter. \n\nDo not truncate your output. \n\n'Original text': \n\n<topic> \n\n <L1>& ,&<L2>&, &<L3>&, &<L4>"
+          },
+          { 
+            "answer": "Introduction to a learning module video script",
+            "description": "Hi Kaplan GPT\n\n Write a script of approximately two minutes being an introduction to an online learning module video. This video will be aimed at learners studying <qualification>, <paper>.\n\n The material being introduced is contained in <all or part> the ''original text'' below: \n <part>\n\n  Ensure a professional tone and include plenty of modern real world examples.\n\n  The 'learning outcomes' referred to in point 2 below, may be explicitly stated in the material you've been given, but if not, please use your judgement as to what these are, based on any summaries, content lists or anything else provided in the material.\n\n The script should have the following 3 sections:\n\n 1. “Hook the learner”; How would you start this topic in a classroom? Do you have a story that relates to this topic?\n\n 2. Learning outcomes; Directly addressing the learner, in conversational language… By the end of this module, what will they be able to do that they can’t do now? How do you (the expert, the tutor) measure success here? Help the student understand what success looks like and how they can achieve it. The learning outcomes for this particular module are listed at the bottom of this prompt under the heading of ''Learning outcomes''.\n\n  3. Big picture; Some of the following please, as relevant for this particular module: Why is it important to learn this? When will the learner need/use this in the real world? What’s interesting about this topic? Where could this take them in terms of career progression (what’s in it for them)? Where does this module sit within the sequence of study modules? Which application module will be covered? How will this be assessed in the exam? What are the trickiest parts? What should the learner expect from this module? What advice would you give the student for this module?\n\n Do not truncate your output."
+          },
+        {
+            "answer": "Written question debrief script",
+            "description": "Hi KaplanGPT, Your task is to produce a script for a presenter-to-camera video debrief of an exam question for the paper <paper> of the <qualification> professional accountancy qualification. You should assume that the student will already have attempted the question. The purpose of this debrief is to help the student to understand the answer provided and improve their approach going forward. Please also identify the appropriate on-screen narrative to support the script. The full question would be worth <marks> marks, and the learner would have <minutes per mark> minutes per mark to complete the question. The question and a comprehensive answer are presented below in <all or part> of the original text: <part>"
+          },
+        {
+            "answer": "OT question debrief script",
+            "description": "Hi Kaplan GPT. Please read through <all or part> the 'original text' which follows: <part> You've been provided with an objective test question and answer options. Please provide a debrief to the question that would be suitable for a presenter who is talking in simple English, including an explanation of why you have chosen these answers. Original text: <original text>"
+          },
+        {
+            "answer": "VOPP script from underlying text",
+            "description": "Please produce a script for a Voice Over Powerpoint (VOPP) video based on <all or part> the 'original text' below: <part> Your script must have the following characteristics: *Be engaging *Be targeted at a learner studying <qualification> <paper> *Be professional in tone *Be in 'British English' Please ensure the script is appropriate for a professional-level qualification, it should not include magical adventures or story-based plots. Assume that this video appears in the middle of a session so there is no need for an intro or summary. Assume that this video is for existing students so don't encourage them to subscribe. If possible, keep sentences below 15 words in order to make the use of autocues easier for the presenter."
+          },
+        {
+            "answer": "Improve an existing VOPP script",
+            "description": "Please review this script for a Voice Over Powerpoint (VOPP) video contained in <all or part> the ''original text'' below:\n\n <part>\n\n Your script must have the following characteristics:\n *Be engaging \n*Please ensure the script is appropriate for a professional-level qualification, it should not include magical adventures or story-based plots.\n *Be professional in tone\n *Be in ''British English''\n\n Assume that this video appears in the middle of a session so there is no need for an intro or summary.\n\n Assume that this video is for existing students so don't encourage them to subscribe.\n\n  If possible, keep sentences below 15 words in order to make the use of autocues easier for the presenter.\n\n You may find it helpful to have in mind a learner for whom English is not their first language.\n\n Do not truncate your output.\n\n ''Original text'':\n\n <original text>"
+          }
+    ]
 }
