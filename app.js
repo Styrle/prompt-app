@@ -166,53 +166,58 @@ app.get("/api/formSnippet", (req, res) => {
 
     // Load prompt.json so we can display it at Q38
     const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
-    const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
+const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
-    // For now, we do NOT attempt to figure out which q3 answer was selected server-side 
-    // (because we won’t know the user’s selection at this point). Instead, 
-    // we pass prompt.json (particularly the q3 array) down to the client side via data attributes.
+// We'll pass both the q3 and q6 arrays to the front end:
+const q3Array = promptData.q3 || [];
+const q6Array = promptData.q6 || [];
 
-    // We'll pass the entire q3 array to the front end:
-    const q3Array = promptData.q3 || [];
+// Log the data we're using
+console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.length} q6 prompts`);
 
-    // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
-    const formHtml = buildForm(formData /* no second arg for finalPromptText now */);
+// Make sure the JSON is properly escaped for HTML attributes
+const q3Attr = JSON.stringify(q3Array).replace(/"/g, '&quot;');
+const q6Attr = JSON.stringify(q6Array).replace(/"/g, '&quot;');
 
-    // Build conditionalLogicMap
-    const conditionalLogicMap = {};
-    formData.questions.forEach((question, idx) => {
-      if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
-        const questionId = question.id || `question-${idx}`;
-        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
-          option: escapeName(logic.option),
-          targetId: logic.goToQuestion
-        }));
-      }
-    });
+// We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
+const formHtml = buildForm(formData /* no second arg for finalPromptText now */);
 
-    // Build questionIndexMap
-    const questionIndexMap = {};
-    formData.questions.forEach((question, idx) => {
-      if (question.id) {
-        questionIndexMap[question.id] = idx;
-      }
-    });
+// Build conditionalLogicMap
+const conditionalLogicMap = {};
+formData.questions.forEach((question, idx) => {
+  if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
+    const questionId = question.id || `question-${idx}`;
+    conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
+      option: escapeName(logic.option),
+      targetId: logic.goToQuestion
+    }));
+  }
+});
 
-    // Wrap snippet, embedding q3 array in data-q3prompts
-    const snippet = `
-    <div class="styled-form-container"
-         data-logicmap='${JSON.stringify(conditionalLogicMap)}'
-         data-questionindexmap='${JSON.stringify(questionIndexMap)}'
-         data-totalquestions='${formData.questions.length}'
-         data-q3prompts='${JSON.stringify(q3Array)}'>
-      <h2>${qualification} ${subject}</h2>
-      <form>
-        ${formHtml}
-      </form>
-    </div>
-  `;
+// Build questionIndexMap
+const questionIndexMap = {};
+formData.questions.forEach((question, idx) => {
+  if (question.id) {
+    questionIndexMap[question.id] = idx;
+  }
+});
 
-    res.send(snippet);
+// Wrap snippet, embedding q3 and q6 arrays in data attributes
+const snippet = `
+<div class="styled-form-container"
+     data-logicmap='${JSON.stringify(conditionalLogicMap)}'
+     data-questionindexmap='${JSON.stringify(questionIndexMap)}'
+     data-totalquestions='${formData.questions.length}'
+     data-q3prompts="${q3Attr}"
+     data-q6prompts="${q6Attr}">
+  <h2>${qualification} ${subject}</h2>
+  <form>
+    ${formHtml}
+  </form>
+</div>
+`;
+
+res.send(snippet);
 
   } catch (err) {
     console.error(`[formSnippet] Failed to load form snippet:`, err);
