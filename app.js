@@ -171,6 +171,9 @@ const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 // We'll pass both the q3 and q6 arrays to the front end:
 const q3Array = promptData.q3 || [];
 const q6Array = promptData.q6 || [];
+const q7Array = promptData.q7 || [];
+const q10Array = promptData.q10 || [];
+const q11Array = promptData.q11 || [];
 
 // Log the data we're using
 console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.length} q6 prompts`);
@@ -178,6 +181,9 @@ console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.len
 // Make sure the JSON is properly escaped for HTML attributes
 const q3Attr = JSON.stringify(q3Array).replace(/"/g, '&quot;');
 const q6Attr = JSON.stringify(q6Array).replace(/"/g, '&quot;');
+const q7Attr = JSON.stringify(q7Array).replace(/"/g, '&quot;');
+const q10Attr = JSON.stringify(q10Array).replace(/"/g, '&quot;');
+const q11Attr = JSON.stringify(q11Array).replace(/"/g, '&quot;');
 
 // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
 const formHtml = buildForm(formData /* no second arg for finalPromptText now */);
@@ -209,7 +215,10 @@ const snippet = `
      data-questionindexmap='${JSON.stringify(questionIndexMap)}'
      data-totalquestions='${formData.questions.length}'
      data-q3prompts="${q3Attr}"
-     data-q6prompts="${q6Attr}">
+     data-q6prompts="${q6Attr}"
+     data-q7prompts="${q7Attr}"
+     data-q10prompts="${q10Attr}"
+     data-q11prompts="${q11Attr}">
   <h2>${qualification} ${subject}</h2>
   <form>
     ${formHtml}

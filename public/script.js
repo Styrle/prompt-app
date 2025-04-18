@@ -15,8 +15,11 @@ let paperName = "";
 let minutesPerMark = "";
 
 // Store user’s final chosen Q3 prompt from prompt.json
-let selectedQ3PromptText = "";  
+let selectedQ3PromptText = "";
 let selectedQ6PromptText = "";
+let selectedQ7PromptText = "";
+let selectedQ10PromptText = "";
+let selectedQ11PromptText = "";
 
 
 // Possibly store the # of marks from q4 if relevant
@@ -38,6 +41,9 @@ function showFormSnippet(qualification, subject) {
     // Reset stored values for a new selection
     selectedQ3PromptText = "";
     selectedQ6PromptText = "";
+    selectedQ7PromptText = "";
+    selectedQ10PromptText = "";
+    selectedQ11PromptText = "";
     writtenTestMarks = "";
     userQuestionText = "";
     userAnswerText = "";
@@ -83,54 +89,38 @@ function showFormSnippet(qualification, subject) {
           questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
           window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
           
-          // Load q3 prompts
-          const q3Attr = containerDiv.getAttribute("data-q3prompts");
-          if (q3Attr) {
+          // Parse all prompt arrays with the same robust approach
+          const parsePromptArray = (attrName) => {
+            const attr = containerDiv.getAttribute(attrName);
+            if (!attr) return [];
+            
             try {
-              // First try direct JSON parsing
-              window.q3Prompts = JSON.parse(q3Attr);
+              return JSON.parse(attr);
             } catch (e) {
-              // If that fails, try decoding HTML entities first
               try {
-                const decoded = q3Attr.replace(/&quot;/g, '"');
-                window.q3Prompts = JSON.parse(decoded);
+                const decoded = attr.replace(/&quot;/g, '"');
+                return JSON.parse(decoded);
               } catch (e2) {
-                console.error("[showFormSnippet] Failed to parse q3Prompts even after decoding:", e2);
-                window.q3Prompts = [];
+                console.error(`[showFormSnippet] Failed to parse ${attrName} even after decoding:`, e2);
+                return [];
               }
             }
-          } else {
-            window.q3Prompts = [];
-          }
-          console.log("[showFormSnippet] q3Prompts =", window.q3Prompts);
+          };
           
-          // Load q6 prompts - same robust approach
-          const q6Attr = containerDiv.getAttribute("data-q6prompts");
-          if (q6Attr) {
-            try {
-              // First try direct JSON parsing
-              window.q6Prompts = JSON.parse(q6Attr);
-            } catch (e) {
-              // If that fails, try decoding HTML entities first
-              try {
-                const decoded = q6Attr.replace(/&quot;/g, '"');
-                window.q6Prompts = JSON.parse(decoded);
-              } catch (e2) {
-                console.error("[showFormSnippet] Failed to parse q6Prompts even after decoding:", e2);
-                // IMPORTANT: For debugging, add a fallback with the expected structure
-                window.q6Prompts = [
-                  {
-                    answer: "Produce generic video script",
-                    description: "Example the 'original text' below: <part> Please also identify the appropriate on-screen narrative to support the script. Your script must have the following characteristics: *Be engaging *Be targeted at a learner studying <qualification> <paper> *Be professional in tone *Be in 'British English'..."
-                  },
-                  // Add other options as needed
-                ];
-              }
-            }
-          } else {
-            window.q6Prompts = [];
-          }
-          console.log("[showFormSnippet] q6Prompts =", window.q6Prompts);
+          // Load all prompt arrays
+          window.q3Prompts = parsePromptArray("data-q3prompts");
+          window.q6Prompts = parsePromptArray("data-q6prompts");
+          window.q7Prompts = parsePromptArray("data-q7prompts");
+          window.q10Prompts = parsePromptArray("data-q10prompts");
+          window.q11Prompts = parsePromptArray("data-q11prompts");
+          
+          console.log("[showFormSnippet] Loaded prompt data:", {
+            q3: window.q3Prompts.length,
+            q6: window.q6Prompts.length,
+            q7: window.q7Prompts?.length || 0,
+            q10: window.q10Prompts?.length || 0,
+            q11: window.q11Prompts?.length || 0
+          });
         } catch (err) {
           console.error("[showFormSnippet] Failed to parse snippet data attributes:", err);
         }
@@ -195,18 +185,18 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     }
     console.log(`[goToQuestion] selectedValue='${selectedValue}' at question='${currentId}'`);
 
-    // 2) If user just answered Q3 => pick the matching prompt text
+    // 2) Process prompt selection for q3
     if (currentId === "q3" && selectedValue) {
       let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
       plainChoice = plainChoice.replace(/[()]/g, "").trim();
       console.log(`[goToQuestion] Q3 plainChoice='${plainChoice}'. Checking in window.q3Prompts:`, window.q3Prompts);
-    
+
       const foundObj = (window.q3Prompts || []).find(obj => {
         let normalized = obj.answer.toLowerCase().replace(/[()]/g, "").trim();
         console.log("Comparing => user:", plainChoice, "<==> prompt.json:", normalized);
         return normalized === plainChoice;
       });
-    
+
       if (foundObj) {
         console.log("[goToQuestion] Found matching q3 prompt:", foundObj.description);
         selectedQ3PromptText = foundObj.description;
@@ -216,7 +206,7 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
     
-    // 3) If user just answered Q6 => pick the matching prompt text - EXACT SAME PATTERN
+    // 3) Process prompt selection for q6
     if (currentId === "q6" && selectedValue) {
       let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
       plainChoice = plainChoice.replace(/[()]/g, "").trim();
@@ -262,49 +252,157 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
         }
       }
     }
+    
+    // 4) Process prompt selection for q7
+    if (currentId === "q7" && selectedValue) {
+      let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
+      plainChoice = plainChoice.replace(/[()]/g, "").trim();
+      
+      console.log(`[goToQuestion] Q7 plainChoice='${plainChoice}'`);
+      console.log("[goToQuestion] Available q7Prompts:", window.q7Prompts);
+      
+      if (!window.q7Prompts || !Array.isArray(window.q7Prompts) || window.q7Prompts.length === 0) {
+        console.error("[goToQuestion] Q7 prompts data is not valid:", window.q7Prompts);
+        selectedQ7PromptText = "";
+      } else {
+        // Try to find a match
+        let found = false;
+        for (let i = 0; i < window.q7Prompts.length; i++) {
+          const obj = window.q7Prompts[i];
+          if (!obj || !obj.answer) continue;
+          
+          let normalized = obj.answer.toLowerCase().replace(/[()]/g, "").trim();
+          console.log(`[goToQuestion] Comparing Q7: "${plainChoice}" with "${normalized}" → ${plainChoice === normalized ? 'MATCH' : 'NO MATCH'}`);
+          
+          if (plainChoice === normalized) {
+            console.log("[goToQuestion] Found matching q7 prompt at index", i, ":", obj.description.substring(0, 50) + "...");
+            selectedQ7PromptText = obj.description;
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          console.warn("[goToQuestion] No match found for q7 choice:", plainChoice);
+          selectedQ7PromptText = "";
+        }
+      }
+    }
+    
+    // 5) Process prompt selection for q10
+    if (currentId === "q10" && selectedValue) {
+      let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
+      plainChoice = plainChoice.replace(/[()]/g, "").trim();
+      
+      console.log(`[goToQuestion] Q10 plainChoice='${plainChoice}'`);
+      console.log("[goToQuestion] Available q10Prompts:", window.q10Prompts);
+      
+      if (!window.q10Prompts || !Array.isArray(window.q10Prompts) || window.q10Prompts.length === 0) {
+        console.error("[goToQuestion] Q10 prompts data is not valid:", window.q10Prompts);
+        selectedQ10PromptText = "";
+      } else {
+        // Try to find a match
+        let found = false;
+        for (let i = 0; i < window.q10Prompts.length; i++) {
+          const obj = window.q10Prompts[i];
+          if (!obj || !obj.answer) continue;
+          
+          let normalized = obj.answer.toLowerCase().replace(/[()]/g, "").trim();
+          console.log(`[goToQuestion] Comparing Q10: "${plainChoice}" with "${normalized}" → ${plainChoice === normalized ? 'MATCH' : 'NO MATCH'}`);
+          
+          if (plainChoice === normalized) {
+            console.log("[goToQuestion] Found matching q10 prompt at index", i, ":", obj.description.substring(0, 50) + "...");
+            selectedQ10PromptText = obj.description;
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          console.warn("[goToQuestion] No match found for q10 choice:", plainChoice);
+          selectedQ10PromptText = "";
+        }
+      }
+    }
+    
+    // 6) Process prompt selection for q11
+    if (currentId === "q11" && selectedValue) {
+      let plainChoice = selectedValue.replace(/_/g, " ").toLowerCase();
+      plainChoice = plainChoice.replace(/[()]/g, "").trim();
+      
+      console.log(`[goToQuestion] Q11 plainChoice='${plainChoice}'`);
+      console.log("[goToQuestion] Available q11Prompts:", window.q11Prompts);
+      
+      if (!window.q11Prompts || !Array.isArray(window.q11Prompts) || window.q11Prompts.length === 0) {
+        console.error("[goToQuestion] Q11 prompts data is not valid:", window.q11Prompts);
+        selectedQ11PromptText = "";
+      } else {
+        // Try to find a match
+        let found = false;
+        for (let i = 0; i < window.q11Prompts.length; i++) {
+          const obj = window.q11Prompts[i];
+          if (!obj || !obj.answer) continue;
+          
+          let normalized = obj.answer.toLowerCase().replace(/[()]/g, "").trim();
+          console.log(`[goToQuestion] Comparing Q11: "${plainChoice}" with "${normalized}" → ${plainChoice === normalized ? 'MATCH' : 'NO MATCH'}`);
+          
+          if (plainChoice === normalized) {
+            console.log("[goToQuestion] Found matching q11 prompt at index", i, ":", obj.description.substring(0, 50) + "...");
+            selectedQ11PromptText = obj.description;
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          console.warn("[goToQuestion] No match found for q11 choice:", plainChoice);
+          selectedQ11PromptText = "";
+        }
+      }
+    }
 
-    // 4) If user just answered Q4 or Q8 => store the marks
+    // 7) If user just answered Q4 or Q8 => store the marks
     if (currentId === "q4" || currentId === "q8") {
       const inputEl = questionBlock.querySelector("textarea, input[type=text]");
       writtenTestMarks = inputEl ? inputEl.value.trim() : "";
       console.log(`[goToQuestion] User typed marks (from ${currentId}) =>`, writtenTestMarks);
     }
 
-    // 5) If user just answered Q29 => store the "Question" text
+    // 8) If user just answered Q29 => store the "Question" text
     if (currentId === "q29") {
       const inputEl = questionBlock.querySelector("textarea, input[type=text]");
       userQuestionText = inputEl ? inputEl.value.trim() : "";
       console.log("[goToQuestion] User typed a 'Question' =>", userQuestionText);
     }
 
-    // 6) If user just answered Q30 => store the "Answer" text
+    // 9) If user just answered Q30 => store the "Answer" text
     if (currentId === "q30") {
       const inputEl = questionBlock.querySelector("textarea, input[type=text]");
       userAnswerText = inputEl ? inputEl.value.trim() : "";
       console.log("[goToQuestion] User typed an 'Answer' =>", userAnswerText);
     }
     
-    // 7) If user just answered Q17 => store "all or part"
+    // 10) If user just answered Q17 => store "all or part"
     if (currentId === "q17" && selectedValue) {
       allOrPartText = selectedValue;
       console.log("[goToQuestion] User selected 'all or part' =>", allOrPartText);
     }
     
-    // 8) If user just answered Q18 => store "part" text
+    // 11) If user just answered Q18 => store "part" text
     if (currentId === "q18") {
       const inputEl = questionBlock.querySelector("textarea, input[type=text]");
       partText = inputEl ? inputEl.value.trim() : "";
       console.log("[goToQuestion] User typed 'part' =>", partText);
     }
     
-    // 9) If user just answered Q37 => store "original text"
+    // 12) If user just answered Q37 => store "original text"
     if (currentId === "q37") {
       const inputEl = questionBlock.querySelector("textarea, input[type=text]");
       originalText = inputEl ? inputEl.value.trim() : "";
       console.log("[goToQuestion] User typed 'original text' =>", originalText);
     }
 
-    // 10) Evaluate conditional logic to find nextId
+    // 13) Evaluate conditional logic to find nextId
     const rules = conditionalLogicMap[currentId];
     console.log("[goToQuestion] Checking logicMap for currentId:", rules);
     if (rules && selectedValue) {
@@ -327,64 +425,73 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   }
   nextBlock.style.display = "block";
 
-  // 11) If Q38 => fill final prompt
+  // 14) If Q38 => fill final prompt
   if (nextId === "q38") {
     console.log("[goToQuestion] Reached Q38 => building final prompt");
     const finalTextarea = document.getElementById("final-prompt-textarea");
     if (finalTextarea) {
-      // Decide which prompt to use - either q3 or q6 based on what was selected
-      let finalPrompt = "";
-      if (selectedQ3PromptText) {
-        finalPrompt = selectedQ3PromptText;
-      } else if (selectedQ6PromptText) {
-        finalPrompt = selectedQ6PromptText;
-      }
+      // Decide which prompt to use in order of priority
+      let finalPrompt = selectedQ3PromptText || 
+                        selectedQ6PromptText || 
+                        selectedQ7PromptText || 
+                        selectedQ10PromptText || 
+                        selectedQ11PromptText || 
+                        "";
 
-      // Insert the # of marks if q4 or q8 was answered
+      // Replace all placeholders
       if (writtenTestMarks) {
         finalPrompt = finalPrompt.replace(/<WTQ marks>/g, writtenTestMarks);
         finalPrompt = finalPrompt.replace(/<marks>/g, writtenTestMarks);
       }
 
-      // Replace <qualification> and <topic> if desired
       if (currentQualification) {
         finalPrompt = finalPrompt.replace(/<qualification>/g, currentQualification);
       }
+      
       if (currentActiveSubject) {
         finalPrompt = finalPrompt.replace(/<topic>/g, currentActiveSubject);
       }
       
-      // Replace <paper> placeholder if we have that info
       if (paperName) {
         finalPrompt = finalPrompt.replace(/<paper>/g, paperName);
       }
       
-      // Replace <minutes per mark> placeholder if we have that info
       if (minutesPerMark) {
         finalPrompt = finalPrompt.replace(/<minutes per mark>/g, minutesPerMark);
       }
       
-      // Replace <all or part> if we have that info
       if (allOrPartText) {
         finalPrompt = finalPrompt.replace(/<all or part>/g, allOrPartText);
       }
       
-      // Replace <part> if we have that info
       if (partText) {
         finalPrompt = finalPrompt.replace(/<part>/g, partText);
       }
       
-      // Replace <original text> if we have that info
       if (originalText) {
         finalPrompt = finalPrompt.replace(/<original text>/g, originalText);
       }
 
-      // Replace <Question> and <Answer> from q29 & q30
       if (userQuestionText) {
         finalPrompt = finalPrompt.replace(/<Question>/g, userQuestionText);
       }
+      
       if (userAnswerText) {
         finalPrompt = finalPrompt.replace(/<Answer>/g, userAnswerText);
+      }
+
+      // Handle special placeholders in templates
+      if (finalPrompt.includes("<British values>")) {
+        finalPrompt = finalPrompt.replace(/<British values>/g, "");
+      }
+      
+      if (finalPrompt.includes("<Functional skills>")) {
+        finalPrompt = finalPrompt.replace(/<Functional skills>/g, "");
+      }
+      
+      if (finalPrompt.includes("<KSB")) {
+        finalPrompt = finalPrompt.replace(/<KSB's>/g, "");
+        finalPrompt = finalPrompt.replace(/<KSB>/g, "");
       }
 
       console.log("[goToQuestion] Final prompt being inserted:", finalPrompt);
