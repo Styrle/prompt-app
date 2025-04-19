@@ -21,6 +21,12 @@ let selectedQ7PromptText = "";
 let selectedQ10PromptText = "";
 let selectedQ11PromptText = "";
 
+function escapeName(str) {
+  return str
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+}
 
 // Possibly store the # of marks from q4 if relevant
 let writtenTestMarks = "";
@@ -425,6 +431,106 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   }
   nextBlock.style.display = "block";
 
+  if (window.isAdmin) {
+    /* decorate the question once */
+    if (!nextBlock.hasAttribute("data-adminified")) {
+  
+      /* make title editable */
+      const titleDiv = nextBlock.querySelector(".question-title");
+      if (titleDiv) {
+        titleDiv.contentEditable = "false";
+        titleDiv.style.outline   = "1px dashed #005DE8";
+      }
+  
+      /* map of option‑text → goToQuestion from the original JSON */
+      const original   = window.questionsCache.find(q => q.id === nextId) || {};
+      const logicByOpt = {};
+      (original.conditionalLogic || []).forEach(r => {
+        logicByOpt[(r.option || "").trim()] = r.goToQuestion || "";
+      });
+  
+      /* every option row: make the label editable + mini “go to” box */
+      nextBlock.querySelectorAll(".answer-box").forEach(box => {
+        const span          = box.querySelector("span");
+        span.contentEditable = "false";
+        span.style.outline   = "1px dashed #005DE8";
+  
+        const input = document.createElement("input");
+        input.type  = "text";
+        input.className = "admin-logic-input";
+        input.style.marginLeft = "auto";
+        input.style.width = "120px";
+        /* show it right away if we're already editing */
+        input.style.display = window.editMode ? "" : "none";
+        input.value  = logicByOpt[span.innerText.trim()] || "";
+        box.style.display = "flex";
+        box.appendChild(input);
+      });
+  
+      /* -------- SAVE ---------- */
+      const saveBtn = document.createElement("button");
+      saveBtn.type        = "button";
+      saveBtn.textContent = "Save";
+      saveBtn.className   = "admin-save-btn subject-btn";
+      saveBtn.style.marginTop = "10px";
+      saveBtn.style.display   = "none";
+  
+      saveBtn.addEventListener("click", async () => {
+        const updated = structuredClone(original);
+      
+        /* pull latest edits */
+        if (titleDiv) updated.title = titleDiv.innerText.trim();
+        const spans = nextBlock.querySelectorAll(".answer-box span");
+        updated.options = Array.from(spans).map(s => s.innerText.trim());
+      
+        updated.conditionalLogic = Array.from(nextBlock.querySelectorAll(".answer-box"))
+          .map(box => {
+            const txt  = box.querySelector("span").innerText.trim();
+            const dest = box.querySelector(".admin-logic-input").value.trim();
+            return dest ? { option: txt, goToQuestion: dest } : null;
+          })
+          .filter(Boolean);
+      
+        /* PUT -> server */
+        try {
+          const resp = await fetch(`/api/questions/${nextId}`, {
+            method : "PUT",
+            headers: { "Content-Type":"application/json" },
+            body   : JSON.stringify(updated)
+          });
+      
+          if (!resp.ok) {
+            const msg = await resp.text();
+            return alert("Save failed: " + msg);
+          }
+      
+          alert("Saved!");
+      
+          /* keep local copies fresh */
+          const idx = window.questionsCache.findIndex(q => q.id === nextId);
+          if (idx !== -1) window.questionsCache[idx] = updated;
+          conditionalLogicMap[nextId] = updated.conditionalLogic
+            .map(r => ({ option: escapeName(r.option), targetId: r.goToQuestion }));
+        } catch (err) {
+          alert("Save failed: " + err.message);
+        }
+      });
+  
+      nextBlock.appendChild(saveBtn);
+      nextBlock.setAttribute("data-adminified", "1");
+    }
+  
+    /* toggle fields according to edit‑mode */
+    const show = window.editMode;
+    nextBlock.querySelectorAll("[contenteditable]").forEach(el => {
+      el.setAttribute("contenteditable", show ? "true" : "false");
+      el.style.pointerEvents = show ? "auto" : "none";
+      el.style.background    = show ? "#fffbe6" : "transparent";
+    });
+    nextBlock.querySelectorAll(".admin-save-btn, .admin-logic-input")
+      .forEach(el => el.style.display = show ? "" : "none");
+  }
+
   // 14) If Q38 => fill final prompt
   if (nextId === "q38") {
     console.log("[goToQuestion] Reached Q38 => building final prompt");
@@ -503,70 +609,94 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const qualSelect = document.getElementById("qualificationSelect");
+  const qualSelect       = document.getElementById("qualificationSelect");
   const subjectContainer = document.getElementById("subject-container");
-  const formContainer = document.getElementById("form-container");
+  const formContainer    = document.getElementById("form-container");
 
-  if (typeof window.questionIndexMap !== "undefined") {
-    questionIndexMap = window.questionIndexMap;
-  }
-  if (typeof window.conditionalLogicMap !== "undefined") {
-    conditionalLogicMap = window.conditionalLogicMap;
-  }
+  if (typeof window.questionIndexMap    !== "undefined") questionIndexMap    = window.questionIndexMap;
+  if (typeof window.conditionalLogicMap !== "undefined") conditionalLogicMap = window.conditionalLogicMap;
 
-  // 1) Fetch qualifications (now returning array of { qualification, title } objects)
+  /* ---------- ADMIN BOOTSTRAP ----------------------------------- */
+  window.isAdmin        = false;
+  window.editMode       = false;
+  window.adminEmail     = "";          // no longer needed client‑side
+  window.questionsCache = [];
+
+  (async () => {
+    /* auto‑detect – no prompt */
+    try {
+      const { isAdmin } = await (await fetch("/api/isAdmin")).json();
+      window.isAdmin = !!isAdmin;
+
+      if (window.isAdmin) {
+        window.questionsCache = await (await fetch("/api/questions")).json();
+
+        document.body.insertAdjacentHTML("beforeend", `
+          <button id="admin-toggle-btn"
+                  style="position:fixed;top:8px;right:12px;background:#005DE8;color:#fff;
+                         padding:6px 14px;border:none;border-radius:6px;z-index:9999;
+                         font-size:12px;cursor:pointer">
+            ADMIN&nbsp;MODE:&nbsp;OFF
+          </button>`);
+        
+        const toggleBtn = document.getElementById("admin-toggle-btn");
+        toggleBtn.addEventListener("click", () => {
+          window.editMode = !window.editMode;
+          toggleBtn.textContent = "ADMIN MODE: " + (window.editMode ? "ON" : "OFF");
+        
+          /* show / hide admin widgets */
+          document.querySelectorAll(".admin-save-btn, .admin-logic-input")
+            .forEach(el => el.style.display = window.editMode ? "" : "none");
+        
+          /* enable / disable contentEditable fields */
+          document.querySelectorAll("[data-adminified] [contenteditable]")
+            .forEach(el => {
+              el.setAttribute("contenteditable", window.editMode ? "true" : "false");
+              el.style.pointerEvents = window.editMode ? "auto" : "none";
+              el.style.background    = window.editMode ? "#fffbe6" : "transparent";
+            });
+        });
+      }
+    } catch {/* treat as non‑admin */}
+  })();
+  /* -------------------------------------------------------------- */
+
+  /* ---------- qualification list (unchanged) -------------------- */
   fetch("/api/qualifications")
     .then(res => res.json())
-    .then(qualifications => {
-      qualifications.forEach(q => {
-        const opt = document.createElement("option");
-        opt.value = q.qualification;  // internal key
-        opt.textContent = q.title;    // friendly title from the JSON
-        qualSelect.appendChild(opt);
+    .then(arr => {
+      arr.forEach(q => {
+        const o = document.createElement("option");
+        o.value = q.qualification;
+        o.textContent = q.title;
+        qualSelect.appendChild(o);
       });
-    })
-    .catch(console.error);
+    });
 
-  // 2) On change, fetch subjects for that qualification
   qualSelect.addEventListener("change", () => {
     currentQualification = qualSelect.value;
     formContainer.innerHTML = "";
-    currentActiveSubject = null; // reset active subject
-
+    currentActiveSubject = null;
     if (!currentQualification) return;
 
     fetch(`/api/subjects?qualification=${encodeURIComponent(currentQualification)}`)
       .then(r => r.json())
-      .then(subjects => {
-        renderSubjectButtons(subjects);
-      })
-      .catch(console.error);
+      .then(renderSubjectButtons);
   });
 
   function renderSubjectButtons(subjects) {
     subjectContainer.innerHTML = "";
-
     subjects.forEach(sub => {
-      const btn = document.createElement("button");
-      btn.classList.add("subject-btn");
-      btn.textContent = sub;
-
-      if (sub === currentActiveSubject) {
-        btn.classList.add("active");
-      }
-
-      btn.style.opacity = 0;
-      setTimeout(() => {
-        btn.style.opacity = 1;
-      }, 10);
-
-      btn.onclick = () => {
+      const b = document.createElement("button");
+      b.className = "subject-btn";
+      b.textContent = sub;
+      if (sub === currentActiveSubject) b.classList.add("active");
+      b.onclick = () => {
         currentActiveSubject = sub;
         showFormSnippet(currentQualification, sub);
-        renderSubjectButtons(subjects); // re-render with updated active state
+        renderSubjectButtons(subjects);
       };
-
-      subjectContainer.appendChild(btn);
+      subjectContainer.appendChild(b);
     });
   }
 });

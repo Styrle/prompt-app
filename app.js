@@ -2,12 +2,71 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const PDFParser = require("pdf2json");
+const dotenv = require('dotenv')
 
 const app = express();
 const PORT = 3000;
 
 // Our global qualification → subject map
 const qualificationMap = {};
+
+
+require('dotenv').config()     
+const ADMIN_EMAILS =
+  (process.env.ADMIN_EMAILS)
+    .split(",")
+    .map(e => e.trim().toLowerCase());
+
+    app.use(express.json());             // already need this for PUT/POST bodies
+
+    function isAdmin(req) {
+      // client sends ?email=jane@corp.com  ***or***  X‑User‑Email header
+        const email =
+        (req.query.email ||
+        req.headers["x-user-email"] ||
+        "").toLowerCase();
+    
+      if (email) return ADMIN_EMAILS.includes(email);
+    
+      /* fallback – auto‑admin when only one e‑mail is configured */
+      return ADMIN_EMAILS.length === 1;
+    }
+    
+    /* ---------- 1) SMALL HELPER ---------- */
+    function loadBaseForm() {
+      const p = path.join(__dirname, "./public/assets/JSON/form.json");
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    }
+    function saveBaseForm(data) {
+      const p = path.join(__dirname, "./public/assets/JSON/form.json");
+      fs.writeFileSync(p, JSON.stringify(data, null, 2));
+    }
+    
+    /* ---------- 2) ROLE END‑POINTS ---------- */
+    
+    // simple “am I admin?” ping
+    app.get("/api/isAdmin", (req, res) => {
+      res.json({ isAdmin: isAdmin(req) });
+    });
+    
+    // list every question (so the editor can draw a table)
+    app.get("/api/questions", (req, res) => {
+      if (!isAdmin(req)) return res.status(403).send("Forbidden");
+      res.json(loadBaseForm().questions);
+    });
+    
+    // replace ONE question object (full JSON, inc. conditionalLogic)
+    app.put("/api/questions/:id", (req, res) => {
+      if (!isAdmin(req)) return res.status(403).send("Forbidden");
+    
+      const formData = loadBaseForm();
+      const idx = formData.questions.findIndex(q => q.id === req.params.id);
+      if (idx === -1) return res.status(404).send("Not found");
+    
+      formData.questions[idx] = req.body;               // trust the client JSON
+      saveBaseForm(formData);
+      res.json({ ok: true });
+    });
 
 /* ------------------------
    1) LOADING PDFs (optional)
