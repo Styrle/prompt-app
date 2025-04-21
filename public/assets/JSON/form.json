@@ -798,7 +798,7 @@
     },
     {
       "id": "q38",
-      "title": "End of form",
+      "title": "",
       "isRequired": false,
       "helpText": "This is the last section of the form, please click submit to generate your prompt and send to Kaplan GPT.",
       "type": "page_break"

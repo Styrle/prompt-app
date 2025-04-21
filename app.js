@@ -17,7 +17,7 @@ const ADMIN_EMAILS =
     .split(",")
     .map(e => e.trim().toLowerCase());
 
-    app.use(express.json());             // already need this for PUT/POST bodies
+    app.use(express.json());            
 
     function isAdmin(req) {
       // client sends ?email=jane@corp.com  ***or***  X‑User‑Email header
@@ -63,7 +63,7 @@ const ADMIN_EMAILS =
       const idx = formData.questions.findIndex(q => q.id === req.params.id);
       if (idx === -1) return res.status(404).send("Not found");
     
-      formData.questions[idx] = req.body;               // trust the client JSON
+      formData.questions[idx] = req.body;              
       saveBaseForm(formData);
       res.json({ ok: true });
     });
@@ -245,7 +245,7 @@ const q10Attr = JSON.stringify(q10Array).replace(/"/g, '&quot;');
 const q11Attr = JSON.stringify(q11Array).replace(/"/g, '&quot;');
 
 // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
-const formHtml = buildForm(formData /* no second arg for finalPromptText now */);
+const formHtml = buildForm(formData);
 
 // Build conditionalLogicMap
 const conditionalLogicMap = {};
