@@ -489,6 +489,236 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   console.log(`[goToQuestion] Now showing '${nextId}'`);
 }
 
+function toggleAllQuestionsVisibility() {
+  // Get all question blocks
+  const questionBlocks = document.querySelectorAll('.question-block');
+  
+  // If no questions found, exit
+  if (!questionBlocks.length) return;
+  
+  if (window.showAllQuestions) {
+    // Show all questions
+    questionBlocks.forEach(block => {
+      block.style.display = 'block';
+      
+      // Modify the navigation buttons to not hide current question when in show-all mode
+      const navButtons = block.querySelectorAll('.nav-btn');
+      navButtons.forEach(btn => {
+        const originalOnclick = btn.getAttribute('onclick');
+        if (originalOnclick) {
+          btn.setAttribute('data-original-onclick', originalOnclick);
+          btn.removeAttribute('onclick');
+          btn.addEventListener('click', (e) => {
+            const params = originalOnclick.match(/goToQuestionAsync\('([^']+)', '([^']+)', ([^)]+)\)/);
+            if (params && params.length >= 4) {
+              const [_, currentId, targetId, isBack] = params;
+              // Don't hide current question, just show target
+              const targetBlock = document.getElementById(targetId);
+              if (targetBlock) {
+                targetBlock.style.display = 'block';
+                // Scroll to the target question
+                targetBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            }
+          });
+        }
+      });
+      
+      // If admin mode is on, make all questions editable
+      if (window.isAdmin) {
+        decorateQuestionForAdmin(block);
+      }
+    });
+    
+    // Add a "Back to Top" button
+    if (!document.getElementById('back-to-top-btn')) {
+      const backToTopBtn = document.createElement('button');
+      backToTopBtn.id = 'back-to-top-btn';
+      backToTopBtn.innerHTML = '↑ Back to Top';
+      backToTopBtn.style.position = 'fixed';
+      backToTopBtn.style.bottom = '20px';
+      backToTopBtn.style.right = '20px';
+      backToTopBtn.style.zIndex = '1000';
+      backToTopBtn.style.background = '#005DE8';
+      backToTopBtn.style.color = '#fff';
+      backToTopBtn.style.padding = '10px 15px';
+      backToTopBtn.style.border = 'none';
+      backToTopBtn.style.borderRadius = '5px';
+      backToTopBtn.style.cursor = 'pointer';
+      
+      backToTopBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      
+      document.body.appendChild(backToTopBtn);
+    }
+    
+    // Add question numbers and anchors for easier navigation
+    questionBlocks.forEach((block, index) => {
+      const questionId = block.id;
+      
+      // Add question number if not already present
+      if (!block.querySelector('.question-number')) {
+        const titleDiv = block.querySelector('.question-title');
+        if (titleDiv) {
+          const questionNumber = document.createElement('div');
+          questionNumber.className = 'question-number';
+          questionNumber.textContent = `Question ${index + 1} (ID: ${questionId})`;
+          questionNumber.style.fontWeight = 'bold';
+          questionNumber.style.color = '#005DE8';
+          questionNumber.style.marginBottom = '5px';
+          block.insertBefore(questionNumber, titleDiv);
+        }
+      }
+      
+      // Add separator between questions for better readability
+      block.style.borderBottom = '2px solid #ddd';
+      block.style.paddingBottom = '20px';
+      block.style.marginBottom = '20px';
+    });
+  } else {
+    // Hide all questions except the first one
+    questionBlocks.forEach((block, index) => {
+      block.style.display = index === 0 ? 'block' : 'none';
+      
+      // Restore original onclick handlers
+      const navButtons = block.querySelectorAll('.nav-btn');
+      navButtons.forEach(btn => {
+        const originalOnclick = btn.getAttribute('data-original-onclick');
+        if (originalOnclick) {
+          btn.setAttribute('onclick', originalOnclick);
+          btn.removeAttribute('data-original-onclick');
+          
+          // Remove event listeners
+          const newBtn = btn.cloneNode(true);
+          btn.parentNode.replaceChild(newBtn, btn);
+        }
+      });
+      
+      // Remove question numbers
+      const questionNumber = block.querySelector('.question-number');
+      if (questionNumber) {
+        questionNumber.remove();
+      }
+      
+      // Remove separators
+      block.style.borderBottom = '';
+      block.style.paddingBottom = '';
+      block.style.marginBottom = '';
+    });
+    
+    // Remove Back to Top button
+    const backToTopBtn = document.getElementById('back-to-top-btn');
+    if (backToTopBtn) {
+      backToTopBtn.remove();
+    }
+  }
+  
+  // Apply admin edit mode to all visible questions if admin mode is on
+  if (window.isAdmin && window.editMode) {
+    applyAdminEditMode();
+  }
+}
+
+function decorateQuestionForAdmin(block) {
+  // Skip if already decorated
+  if (block.hasAttribute("data-adminified")) return;
+  
+  // Make title editable
+  const titleDiv = block.querySelector(".question-title");
+  if (titleDiv) {
+    titleDiv.contentEditable = "false";
+    titleDiv.style.outline = "1px dashed #005DE8";
+  }
+  
+  // Get the question ID
+  const questionId = block.id;
+  
+  // Find the question from cache
+  const original = window.questionsCache.find(q => q.id === questionId) || {};
+  const logicByOpt = {};
+  (original.conditionalLogic || []).forEach(r => {
+    logicByOpt[(r.option || "").trim()] = r.goToQuestion || "";
+  });
+  
+  // Make options editable and add logic inputs
+  block.querySelectorAll(".answer-box").forEach(box => {
+    const span = box.querySelector("span");
+    if (span) {
+      span.contentEditable = "false";
+      span.style.outline = "1px dashed #005DE8";
+      
+      // Add input for conditional logic if not already present
+      if (!box.querySelector(".admin-logic-input")) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "admin-logic-input";
+        input.style.marginLeft = "auto";
+        input.style.width = "120px";
+        input.style.display = window.editMode ? "" : "none";
+        input.value = logicByOpt[span.innerText.trim()] || "";
+        box.style.display = "flex";
+        box.appendChild(input);
+      }
+    }
+  });
+  
+  // Add save button if not already present
+  if (!block.querySelector(".admin-save-btn")) {
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save";
+    saveBtn.className = "admin-save-btn subject-btn";
+    saveBtn.style.marginTop = "10px";
+    saveBtn.style.display = window.editMode ? "" : "none";
+    
+    saveBtn.addEventListener("click", async () => {
+      const updated = structuredClone(original);
+      
+      // Pull latest edits
+      if (titleDiv) updated.title = titleDiv.innerText.trim();
+      const spans = block.querySelectorAll(".answer-box span");
+      updated.options = Array.from(spans).map(s => s.innerText.trim());
+      
+      updated.conditionalLogic = Array.from(block.querySelectorAll(".answer-box"))
+        .map(box => {
+          const txt = box.querySelector("span").innerText.trim();
+          const dest = box.querySelector(".admin-logic-input").value.trim();
+          return dest ? { option: txt, goToQuestion: dest } : null;
+        })
+        .filter(Boolean);
+      
+      // PUT -> server
+      try {
+        const resp = await fetch(`/api/questions/${questionId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updated)
+        });
+        
+        if (!resp.ok) {
+          const msg = await resp.text();
+          return alert(`Save failed for question ${questionId}: ${msg}`);
+        }
+        
+        alert(`Question ${questionId} saved!`);
+        
+        // Keep local copies fresh
+        const idx = window.questionsCache.findIndex(q => q.id === questionId);
+        if (idx !== -1) window.questionsCache[idx] = updated;
+        conditionalLogicMap[questionId] = updated.conditionalLogic
+          .map(r => ({ option: escapeName(r.option), targetId: r.goToQuestion }));
+      } catch (err) {
+        alert(`Save failed for question ${questionId}: ${err.message}`);
+      }
+    });
+    
+    block.appendChild(saveBtn);
+  }
+  
+  block.setAttribute("data-adminified", "1");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const qualSelect       = document.getElementById("qualificationSelect");
   const subjectContainer = document.getElementById("subject-container");
@@ -502,6 +732,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.editMode       = false;
   window.adminEmail     = "";          
   window.questionsCache = [];
+  window.showAllQuestions = false; // Added flag to track if all questions should be shown
 
   (async () => {
     /* auto‑detect – no prompt */
@@ -513,17 +744,25 @@ document.addEventListener("DOMContentLoaded", () => {
         window.questionsCache = await (await fetch("/api/questions")).json();
 
         document.body.insertAdjacentHTML("beforeend", `
-          <button id="admin-toggle-btn"
-                  style="position:fixed;top:8px;right:12px;background:#005DE8;color:#fff;
-                         padding:6px 14px;border:none;border-radius:6px;z-index:9999;
-                         font-size:12px;cursor:pointer">
-            ADMIN&nbsp;MODE:&nbsp;OFF
-          </button>`);
+          <div style="position:fixed;top:8px;right:12px;display:flex;gap:8px;z-index:9999;">
+            <button id="admin-toggle-btn"
+                    style="background:#005DE8;color:#fff;
+                           padding:6px 14px;border:none;border-radius:6px;
+                           font-size:12px;cursor:pointer">
+              ADMIN&nbsp;MODE:&nbsp;OFF
+            </button>
+            <button id="show-all-questions-btn"
+                    style="background:#005DE8;color:#fff;
+                           padding:6px 14px;border:none;border-radius:6px;
+                           font-size:12px;cursor:pointer">
+              SHOW&nbsp;ALL:&nbsp;OFF
+            </button>
+          </div>`);
         
         const toggleBtn = document.getElementById("admin-toggle-btn");
         toggleBtn.addEventListener("click", () => {
           window.editMode = !window.editMode;
-          toggleBtn.textContent = "ADMIN MODE: " + (window.editMode ? "ON" : "OFF");
+          toggleBtn.textContent = "ADMIN MODE: " + (window.editMode ? "ON" : "OFF");
         
           /* show / hide admin widgets */
           document.querySelectorAll(".admin-save-btn, .admin-logic-input")
@@ -536,6 +775,16 @@ document.addEventListener("DOMContentLoaded", () => {
               el.style.pointerEvents = window.editMode ? "auto" : "none";
               el.style.background    = window.editMode ? "#fffbe6" : "transparent";
             });
+        });
+        
+        // Add event listener for the Show All Questions button
+        const showAllBtn = document.getElementById("show-all-questions-btn");
+        showAllBtn.addEventListener("click", () => {
+          window.showAllQuestions = !window.showAllQuestions;
+          showAllBtn.textContent = "SHOW ALL: " + (window.showAllQuestions ? "ON" : "OFF");
+          
+          // Toggle visibility of all question blocks
+          toggleAllQuestionsVisibility();
         });
       }
     } catch {/* treat as non‑admin */}

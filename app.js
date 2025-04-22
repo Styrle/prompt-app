@@ -59,13 +59,67 @@ const ADMIN_EMAILS =
     app.put("/api/questions/:id", (req, res) => {
       if (!isAdmin(req)) return res.status(403).send("Forbidden");
     
+      // Extract qualification and subject from the request body, if provided
+      const { qualification, subject } = req.body._meta || {};
+      delete req.body._meta; // Remove the metadata before saving
+      
+      // Get the question ID from the URL parameter
+      const questionId = req.params.id;
+      
+      let updated = false;
+      
+      // First, try to update in base form
       const formData = loadBaseForm();
-      const idx = formData.questions.findIndex(q => q.id === req.params.id);
-      if (idx === -1) return res.status(404).send("Not found");
-    
-      formData.questions[idx] = req.body;              
-      saveBaseForm(formData);
-      res.json({ ok: true });
+      const baseIdx = formData.questions.findIndex(q => q.id === questionId);
+      
+      if (baseIdx !== -1) {
+        // Found in base form, update it
+        formData.questions[baseIdx] = req.body;
+        saveBaseForm(formData);
+        updated = true;
+      }
+      
+      // If qualification and subject are provided, try to update in qualification-specific file
+      if (qualification && subject) {
+        try {
+          // Find the qualification-specific JSON file
+          const qualJsonFile = qualificationMap[qualification] &&
+            Object.values(qualificationMap[qualification]).find(filename => filename.endsWith(".json"));
+          
+          if (qualJsonFile) {
+            const qualJsonPath = path.join(__dirname, "public/assets/JSON", qualJsonFile);
+            const qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
+            
+            // Find the subject data
+            const subjectKey = Object.keys(qualData.formsData || {}).find(
+              key => key === subject || key.toLowerCase() === subject.toLowerCase()
+            );
+            
+            if (subjectKey && Array.isArray(qualData.formsData[subjectKey])) {
+              // Find the question in the subject's array
+              const qualIdx = qualData.formsData[subjectKey].findIndex(q => q.id === questionId);
+              
+              if (qualIdx !== -1) {
+                // Update the question in qualification-specific file
+                qualData.formsData[subjectKey][qualIdx] = req.body;
+                
+                // Save the updated qualification data
+                fs.writeFileSync(qualJsonPath, JSON.stringify(qualData, null, 2));
+                updated = true;
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Error updating question in qualification file: ${err.message}`);
+          return res.status(500).send(`Error updating qualification data: ${err.message}`);
+        }
+      }
+      
+      if (updated) {
+        res.json({ ok: true });
+      } else {
+        res.status(404).send("Question not found in any form data");
+      }
     });
 
 /* ------------------------
@@ -225,50 +279,52 @@ app.get("/api/formSnippet", (req, res) => {
 
     // Load prompt.json so we can display it at Q38
     const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
-const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
+    const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
-// We'll pass both the q3 and q6 arrays to the front end:
-const q3Array = promptData.q3 || [];
-const q6Array = promptData.q6 || [];
-const q7Array = promptData.q7 || [];
-const q10Array = promptData.q10 || [];
-const q11Array = promptData.q11 || [];
+    // We'll pass both the q3 and q6 arrays to the front end:
+    const q3Array = promptData.q3 || [];
+    const q6Array = promptData.q6 || [];
+    const q7Array = promptData.q7 || [];
+    const q10Array = promptData.q10 || [];
+    const q11Array = promptData.q11 || [];
 
-// Log the data we're using
-console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.length} q6 prompts`);
+    // Log the data we're using
+    console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.length} q6 prompts`);
 
-// Make sure the JSON is properly escaped for HTML attributes
-const q3Attr = JSON.stringify(q3Array).replace(/"/g, '&quot;');
-const q6Attr = JSON.stringify(q6Array).replace(/"/g, '&quot;');
-const q7Attr = JSON.stringify(q7Array).replace(/"/g, '&quot;');
-const q10Attr = JSON.stringify(q10Array).replace(/"/g, '&quot;');
-const q11Attr = JSON.stringify(q11Array).replace(/"/g, '&quot;');
+    // Make sure the JSON is properly escaped for HTML attributes
+    const q3Attr = JSON.stringify(q3Array).replace(/"/g, '&quot;');
+    const q6Attr = JSON.stringify(q6Array).replace(/"/g, '&quot;');
+    const q7Attr = JSON.stringify(q7Array).replace(/"/g, '&quot;');
+    const q10Attr = JSON.stringify(q10Array).replace(/"/g, '&quot;');
+    const q11Attr = JSON.stringify(q11Array).replace(/"/g, '&quot;');
 
-// We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
-const formHtml = buildForm(formData);
+    // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
+    const formHtml = buildForm(formData);
 
-// Build conditionalLogicMap
-const conditionalLogicMap = {};
-formData.questions.forEach((question, idx) => {
-  if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
-    const questionId = question.id || `question-${idx}`;
-    conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => ({
-      option: escapeName(logic.option),
-      targetId: logic.goToQuestion
-    }));
-  }
-});
+    // Build conditionalLogicMap
+    const conditionalLogicMap = {};
+    formData.questions.forEach((question, idx) => {
+      if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
+        const questionId = question.id || `question-${idx}`;
+        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => {
+          return {
+            option: escapeName(logic.option),
+            targetId: logic.goToQuestion || ""
+          };
+        });
+      }
+    });
 
-// Build questionIndexMap
-const questionIndexMap = {};
-formData.questions.forEach((question, idx) => {
-  if (question.id) {
-    questionIndexMap[question.id] = idx;
-  }
-});
+    // Build questionIndexMap
+    const questionIndexMap = {};
+    formData.questions.forEach((question, idx) => {
+      if (question.id) {
+        questionIndexMap[question.id] = idx;
+      }
+    });
 
-// Wrap snippet, embedding q3 and q6 arrays in data attributes
-const snippet = `
+    // Wrap snippet, embedding q3 and q6 arrays in data attributes
+    const snippet = `
 <div class="styled-form-container"
      data-logicmap='${JSON.stringify(conditionalLogicMap)}'
      data-questionindexmap='${JSON.stringify(questionIndexMap)}'
