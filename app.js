@@ -3,6 +3,18 @@ const fs = require("fs");
 const path = require("path");
 const PDFParser = require("pdf2json");
 const dotenv = require('dotenv')
+const { CosmosClient } = require("@azure/cosmos");
+
+require('dotenv').config()  
+
+const cosmosClient = new CosmosClient({
+  endpoint: process.env.COSMOS_ENDPOINT,
+  key: process.env.COSMOS_KEY
+});
+
+const cosmosDb = cosmosClient.database(process.env.COSMOS_DATABASE);
+const formsContainer = cosmosDb.container(process.env.COSMOS_FORMS_CONTAINER);
+const baseFormDocId = process.env.COSMOS_BASE_FORM_ID;
 
 const app = express();
 const PORT = 3000;
@@ -10,8 +22,7 @@ const PORT = 3000;
 // Our global qualification → subject map
 const qualificationMap = {};
 
-
-require('dotenv').config()     
+   
 const ADMIN_EMAILS =
   (process.env.ADMIN_EMAILS)
     .split(",")
@@ -31,17 +42,36 @@ const ADMIN_EMAILS =
       /* fallback – auto‑admin when only one e‑mail is configured */
       return ADMIN_EMAILS.length === 1;
     }
+
+    console.log("Using container:", process.env.COSMOS_FORMS_CONTAINER);
     
-    /* ---------- 1) SMALL HELPER ---------- */
-    function loadBaseForm() {
-      const p = path.join(__dirname, "./public/assets/JSON/form.json");
-      return JSON.parse(fs.readFileSync(p, "utf8"));
+    const baseFormPk = process.env.COSMOS_BASE_FORM_PK || baseFormDocId;
+
+    async function loadBaseForm() {
+      try {
+        const { resource } = await formsContainer
+          .item(baseFormDocId, baseFormPk)   // id + correct PK
+          .read();
+
+        if (!resource) throw new Error(`Doc '${baseFormDocId}' not found`);
+        return resource;
+      } catch (err) {
+        console.error("Cosmos loadBaseForm failed:", err);
+        return { questions: [] };
+      }
     }
-    function saveBaseForm(data) {
-      const p = path.join(__dirname, "./public/assets/JSON/form.json");
-      fs.writeFileSync(p, JSON.stringify(data, null, 2));
+
+    async function saveBaseForm(data) {
+      data.id = baseFormDocId;
+      // make sure the PK attribute is set too
+      if (!process.env.COSMOS_BASE_FORM_PK) data.id = baseFormDocId;
+      else data[process.env.COSMOS_BASE_FORM_PK_PATH || "id"] = baseFormPk;
+
+      await formsContainer.items.upsert(data);
     }
-    
+
+    console.log("Reading base form: id =", baseFormDocId, "pk =", baseFormPk);
+        
     /* ---------- 2) ROLE END‑POINTS ---------- */
     
     // simple “am I admin?” ping
@@ -50,75 +80,101 @@ const ADMIN_EMAILS =
     });
     
     // list every question (so the editor can draw a table)
-    app.get("/api/questions", (req, res) => {
+    app.get("/api/questions", async (req, res) => {
       if (!isAdmin(req)) return res.status(403).send("Forbidden");
-      res.json(loadBaseForm().questions);
+    
+      const baseForm = await loadBaseForm();         // ← from Cosmos
+      res.json(baseForm.questions || []);
     });
     
-    // replace ONE question object (full JSON, inc. conditionalLogic)
-    app.put("/api/questions/:id", (req, res) => {
+    app.put("/api/questions/:id", async (req, res) => {
       if (!isAdmin(req)) return res.status(403).send("Forbidden");
     
-      // Extract qualification and subject from the request body, if provided
+      /* helper meta from the editor so we can locate the right doc */
       const { qualification, subject } = req.body._meta || {};
-      delete req.body._meta; // Remove the metadata before saving
-      
-      // Get the question ID from the URL parameter
+      delete req.body._meta;
+    
       const questionId = req.params.id;
-      
-      let updated = false;
-      
-      // First, try to update in base form
-      const formData = loadBaseForm();
-      const baseIdx = formData.questions.findIndex(q => q.id === questionId);
-      
-      if (baseIdx !== -1) {
-        // Found in base form, update it
-        formData.questions[baseIdx] = req.body;
-        saveBaseForm(formData);
-        updated = true;
-      }
-      
-      // If qualification and subject are provided, try to update in qualification-specific file
-      if (qualification && subject) {
-        try {
-          // Find the qualification-specific JSON file
-          const qualJsonFile = qualificationMap[qualification] &&
-            Object.values(qualificationMap[qualification]).find(filename => filename.endsWith(".json"));
-          
-          if (qualJsonFile) {
-            const qualJsonPath = path.join(__dirname, "public/assets/JSON", qualJsonFile);
-            const qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
-            
-            // Find the subject data
-            const subjectKey = Object.keys(qualData.formsData || {}).find(
-              key => key === subject || key.toLowerCase() === subject.toLowerCase()
-            );
-            
-            if (subjectKey && Array.isArray(qualData.formsData[subjectKey])) {
-              // Find the question in the subject's array
-              const qualIdx = qualData.formsData[subjectKey].findIndex(q => q.id === questionId);
-              
-              if (qualIdx !== -1) {
-                // Update the question in qualification-specific file
-                qualData.formsData[subjectKey][qualIdx] = req.body;
-                
-                // Save the updated qualification data
-                fs.writeFileSync(qualJsonPath, JSON.stringify(qualData, null, 2));
+      let   updated    = false;                  // did we touch anything?
+    
+      try {
+        /* ───────────────────────────── 1) BASE FORM ───────────────────────────── */
+        const baseForm = await loadBaseForm();
+        const baseIdx  = baseForm.questions.findIndex(q => q.id === questionId);
+    
+        if (baseIdx !== -1) {
+          const existing = baseForm.questions[baseIdx];
+          const merged   = { ...existing, ...req.body };
+    
+          /* merge conditionalLogic – KEEP blanks */
+          const map = {};
+          (existing.conditionalLogic || []).forEach(r => {
+            map[r.option] = r.goToQuestion ?? "";
+          });
+          (req.body.conditionalLogic || []).forEach(r => {
+            if (r?.option) map[r.option] = r.goToQuestion ?? "";
+          });
+          merged.conditionalLogic = Object.entries(map)
+            .map(([option, goToQuestion]) => ({ option, goToQuestion }));
+    
+          baseForm.questions[baseIdx] = merged;
+          await saveBaseForm(baseForm);
+          updated = true;
+        }
+    
+        /* ──────────────────── 2) QUALIFICATION-SPECIFIC ADD-ON ────────────────── */
+        if (qualification && subject) {
+          /* which container holds this qualification? */
+          const qContainerId =
+            (qualificationMap[qualification] &&
+             qualificationMap[qualification].__container) || qualification;
+    
+          const qContainer = cosmosDb.container(qContainerId);
+    
+          /* fetch all docs in that container that have formsData */
+          const { resources } = await qContainer.items
+            .query("SELECT * FROM c WHERE IS_DEFINED(c.formsData)")
+            .fetchAll();
+    
+          if (resources.length) {
+            const doc = resources[0];                          // first one is ours
+            const subjKey = Object.keys(doc.formsData || {})
+              .find(k => k.toLowerCase() === subject.toLowerCase());
+            const subjectArr = subjKey ? doc.formsData[subjKey] : null;
+    
+            if (Array.isArray(subjectArr)) {
+              const idx = subjectArr.findIndex(q => q.id === questionId);
+              if (idx !== -1) {
+                const existingQ = subjectArr[idx];
+                const mergedQ   = { ...existingQ, ...req.body };
+    
+                /* merge conditionalLogic – KEEP blanks */
+                const cmap = {};
+                (existingQ.conditionalLogic || []).forEach(r => {
+                  cmap[r.option] = r.goToQuestion ?? "";
+                });
+                (req.body.conditionalLogic || []).forEach(r => {
+                  if (r?.option) cmap[r.option] = r.goToQuestion ?? "";
+                });
+                mergedQ.conditionalLogic = Object.entries(cmap)
+                  .map(([option, goToQuestion]) => ({ option, goToQuestion }));
+    
+                subjectArr[idx] = mergedQ;
+                await qContainer.items.upsert(doc);            // save back
                 updated = true;
               }
             }
           }
-        } catch (err) {
-          console.error(`Error updating question in qualification file: ${err.message}`);
-          return res.status(500).send(`Error updating qualification data: ${err.message}`);
         }
-      }
-      
-      if (updated) {
-        res.json({ ok: true });
-      } else {
+    
+        /* ───────────────────────────── 3) RESPONSE ───────────────────────────── */
+        if (updated) {
+          return res.json({ ok: true });
+        }
         res.status(404).send("Question not found in any form data");
+      } catch (err) {
+        console.error("[PUT /api/questions] update failed:", err);
+        res.status(500).send("Update failed: " + err.message);
       }
     });
 
@@ -146,50 +202,55 @@ function loadPdfInfo() {
 /* ------------------------
    2) LOADING JSON Data
    ------------------------ */
-function loadJsonInfo() {
-  const jsonDir = path.join(__dirname, "public/assets/JSON");
-  if (!fs.existsSync(jsonDir)) return;
-
-  // Clear existing entries rather than reassigning
-  Object.keys(qualificationMap).forEach(key => delete qualificationMap[key]);
-
-  const allJsons = fs.readdirSync(jsonDir)
-    .filter(f => f.toLowerCase().endsWith(".json"));
-
-  allJsons.forEach(filename => {
+   async function loadJsonInfo() {
+    /* reset the in-memory map */
+    Object.keys(qualificationMap).forEach(k => delete qualificationMap[k]);
+  
     try {
-      const jsonPath = path.join(jsonDir, filename);
-      const jsonData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-
-      // Use 'jsonData.title' for the qualification
-      const qualification = jsonData.title;
-      if (!qualification) return;
-
-      // Ensure we have an object for this qualification
-      if (!qualificationMap[qualification]) {
-        qualificationMap[qualification] = {};
-      }
-
-      // Store the human-friendly title in __title
-      qualificationMap[qualification].__title = jsonData.title;
-
-      // In your example, the formsData object has keys (like "AA", "TC") that hold arrays
-      if (jsonData.formsData && typeof jsonData.formsData === "object") {
-        Object.keys(jsonData.formsData).forEach(subjectKey => {
-          if (Array.isArray(jsonData.formsData[subjectKey])) {
-            qualificationMap[qualification][subjectKey] = filename;
-          }
+      /* pull every container in the database */
+      const { resources: containers } = await cosmosDb.containers.readAll().fetchAll();
+      console.log("[loadJsonInfo] containers found:", containers.map(c => c.id));
+  
+      for (const { id: containerId } of containers) {
+        /* the base “form” container only holds the core question-set – skip it */
+        if (containerId === process.env.COSMOS_FORMS_CONTAINER) continue;
+  
+        const container = cosmosDb.container(containerId);
+        const { resources: docs } = await container.items
+          .query("SELECT c.id, c.title, c.qualification, c.formsData FROM c WHERE IS_DEFINED(c.formsData)")
+          .fetchAll();
+  
+        console.log(`[loadJsonInfo] ${containerId}: ${docs.length} doc(s)`);
+  
+        docs.forEach(doc => {
+          /* choose the most useful handle for the qualification */
+          const qualification = (doc.qualification || doc.title || doc.id || "").trim();
+          if (!qualification) return;
+  
+          if (!qualificationMap[qualification]) qualificationMap[qualification] = {};
+          qualificationMap[qualification].__title     = doc.title || qualification;
+          qualificationMap[qualification].__container = containerId;         // 👈 remember where it lives
+  
+          /* subject → container mapping (optional, kept for completeness) */
+          Object.keys(doc.formsData || {}).forEach(subjectKey => {
+            if (Array.isArray(doc.formsData[subjectKey])) {
+              qualificationMap[qualification][subjectKey] = containerId;
+            }
+          });
         });
       }
+  
+      console.log("[loadJsonInfo] final qualificationMap:", qualificationMap);
     } catch (err) {
-      console.error(`Error parsing ${filename}:`, err);
+      console.error("Cosmos-DB loadJsonInfo failed:", err);
     }
-  });
-}
+  }
 
 // Initialize data
 loadPdfInfo();
 loadJsonInfo();
+
+
 
 /* ------------------------
    3) EXPRESS SETUP
@@ -213,14 +274,19 @@ app.get("/", (req, res) => {
  * GET /api/qualifications 
  * => Return array of { qualification, title } 
 */
-app.get("/api/qualifications", (req, res) => {
-  const allQualifications = Object.keys(qualificationMap).map(key => {
-    return {
-      qualification: key,
-      title: qualificationMap[key].__title || key
-    };
-  });
-  res.json(allQualifications);
+app.get("/api/qualifications", async (_req, res) => {
+  /* if the cache is empty (first call right after boot) */
+  if (Object.keys(qualificationMap).length === 0) {
+    await loadJsonInfo();
+  }
+
+  const list = Object.keys(qualificationMap).map(k => ({
+    qualification: k,
+    title: qualificationMap[k].__title || k
+  }));
+
+  console.log("[/api/qualifications] returning", list.length, "items");
+  res.json(list);
 });
 
 /** GET /api/subjects => Return the subject list for a given qualification. 
@@ -244,86 +310,76 @@ app.get("/api/subjects", (req, res) => {
  * GET /api/formSnippet => Return snippet for the form 
  * (for embedding on the same page rather than navigating away)
 */
-app.get("/api/formSnippet", (req, res) => {
+app.get("/api/formSnippet", async (req, res) => {
   const { qualification, subject } = req.query;
-  console.log(`[formSnippet] Called with qualification='${qualification}', subject='${subject}'`);
-
   if (!qualification || !subject) {
-    console.error(`[formSnippet] Missing qualification or subject!`);
     return res.status(400).send("Missing qualification or subject.");
   }
 
   try {
-    // Load form.json (base questions)
-    const jsonPath = path.join(__dirname, "./public/assets/JSON/form.json");
-    console.log(`[formSnippet] Loading base form data from: ${jsonPath}`);
-    const formData = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-    
-    // Also load qualification-specific data if any
+    /* 1️⃣ — start with the base question set stored in the “form” container */
+    const formData = await loadBaseForm();          // { questions:[…] }
+
+    /* 2️⃣ — merge in the qualification-specific add-on (if any) */
     if (qualification !== "default") {
-      const qualJsonFile = qualificationMap[qualification] &&
-        Object.values(qualificationMap[qualification]).find(filename => filename.endsWith(".json"));
+      const qContainerId =
+        (qualificationMap[qualification] &&
+         qualificationMap[qualification].__container) ||
+        qualification;                              // fallback
 
-      if (qualJsonFile) {
-        const qualJsonPath = path.join(__dirname, "public/assets/JSON", qualJsonFile);
-        const qualData = JSON.parse(fs.readFileSync(qualJsonPath, "utf8"));
+      const qContainer   = cosmosDb.container(qContainerId);
+      const { resources } = await qContainer.items
+        .query("SELECT * FROM c WHERE IS_DEFINED(c.formsData)")
+        .fetchAll();
 
-        const subjectKey = Object.keys(qualData.formsData || {}).find(
-          key => key === subject || key.toLowerCase() === subject.toLowerCase()
-        );
-        if (subjectKey && qualData.formsData[subjectKey]) {
-          formData.questions = formData.questions.concat(qualData.formsData[subjectKey]);
+      console.log(`[formSnippet] ${qContainerId}: fetched ${resources.length} doc(s)`);
+
+      if (resources.length) {
+        const qDoc       = resources[0];
+        const formsData  = qDoc.formsData || {};
+        const subjectArr = formsData[subject] || formsData[subject.toLowerCase()];
+        if (Array.isArray(subjectArr)) {
+          formData.questions = formData.questions.concat(subjectArr);
         }
       }
     }
 
-    // Load prompt.json so we can display it at Q38
-    const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
-    const promptData = JSON.parse(fs.readFileSync(promptPath, "utf8"));
+    /* 3️⃣ — prompt arrays (try local prompt.json, but keep going if it’s gone) */
+    let promptData = {};
+    try {
+      const promptPath = path.join(__dirname, "./public/assets/JSON/prompt.json");
+      promptData       = JSON.parse(fs.readFileSync(promptPath, "utf8"));
+      console.log("[formSnippet] loaded prompt.json");
+    } catch (err) {
+      console.warn("[formSnippet] prompt.json not found – using empty prompt arrays");
+      promptData = {};              // fall back to empty object
+    }
 
-    // We'll pass both the q3 and q6 arrays to the front end:
-    const q3Array = promptData.q3 || [];
-    const q6Array = promptData.q6 || [];
-    const q7Array = promptData.q7 || [];
-    const q10Array = promptData.q10 || [];
-    const q11Array = promptData.q11 || [];
+    const q3Attr  = JSON.stringify(promptData.q3  || []).replace(/"/g, "&quot;");
+    const q6Attr  = JSON.stringify(promptData.q6  || []).replace(/"/g, "&quot;");
+    const q7Attr  = JSON.stringify(promptData.q7  || []).replace(/"/g, "&quot;");
+    const q10Attr = JSON.stringify(promptData.q10 || []).replace(/"/g, "&quot;");
+    const q11Attr = JSON.stringify(promptData.q11 || []).replace(/"/g, "&quot;");
 
-    // Log the data we're using
-    console.log(`[formSnippet] Loaded ${q3Array.length} q3 prompts and ${q6Array.length} q6 prompts`);
-
-    // Make sure the JSON is properly escaped for HTML attributes
-    const q3Attr = JSON.stringify(q3Array).replace(/"/g, '&quot;');
-    const q6Attr = JSON.stringify(q6Array).replace(/"/g, '&quot;');
-    const q7Attr = JSON.stringify(q7Array).replace(/"/g, '&quot;');
-    const q10Attr = JSON.stringify(q10Array).replace(/"/g, '&quot;');
-    const q11Attr = JSON.stringify(q11Array).replace(/"/g, '&quot;');
-
-    // We'll still build the basic form HTML, but no single finalPromptText is inserted yet.
+    /* 4️⃣ — build the snippet (unchanged) */
     const formHtml = buildForm(formData);
 
-    // Build conditionalLogicMap
     const conditionalLogicMap = {};
-    formData.questions.forEach((question, idx) => {
-      if (question.conditionalLogic && Array.isArray(question.conditionalLogic)) {
-        const questionId = question.id || `question-${idx}`;
-        conditionalLogicMap[questionId] = question.conditionalLogic.map(logic => {
-          return {
-            option: escapeName(logic.option),
-            targetId: logic.goToQuestion || ""
-          };
-        });
+    formData.questions.forEach((q, idx) => {
+      if (Array.isArray(q.conditionalLogic)) {
+        conditionalLogicMap[q.id || `question-${idx}`] =
+          q.conditionalLogic.map(r => ({
+            option: escapeName(r.option),
+            targetId: r.goToQuestion || ""
+          }));
       }
     });
 
-    // Build questionIndexMap
     const questionIndexMap = {};
-    formData.questions.forEach((question, idx) => {
-      if (question.id) {
-        questionIndexMap[question.id] = idx;
-      }
+    formData.questions.forEach((q, idx) => {
+      if (q.id) questionIndexMap[q.id] = idx;
     });
 
-    // Wrap snippet, embedding q3 and q6 arrays in data attributes
     const snippet = `
 <div class="styled-form-container"
      data-logicmap='${JSON.stringify(conditionalLogicMap)}'
@@ -338,14 +394,12 @@ app.get("/api/formSnippet", (req, res) => {
   <form>
     ${formHtml}
   </form>
-</div>
-`;
+</div>`;
 
-res.send(snippet);
-
+    res.send(snippet);
   } catch (err) {
-    console.error(`[formSnippet] Failed to load form snippet:`, err);
-    res.status(500).send("Failed to load form snippet: " + err);
+    console.error("[formSnippet] failed:", err);
+    res.status(500).send("Failed to build form snippet: " + err.message);
   }
 });
 

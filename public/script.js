@@ -37,28 +37,27 @@ function showFormSnippet(qualification, subject) {
     console.error("[showFormSnippet] Cannot find form-container element!");
     return Promise.reject(new Error("Form container not found"));
   }
-  
+
   formContainer.innerHTML = "";
-  
-  // Reset visited questions when starting a new form with a new subject
+
+  /* reset state when the subject actually changes */
   const isNewSubjectSelection = currentActiveSubject !== subject;
   if (isNewSubjectSelection) {
-    visitedQuestions = [];
-    // Reset stored values for a new selection
-    selectedQ3PromptText = "";
-    selectedQ6PromptText = "";
-    selectedQ7PromptText = "";
-    selectedQ10PromptText = "";
-    selectedQ11PromptText = "";
-    writtenTestMarks = "";
-    userQuestionText = "";
-    userAnswerText = "";
-    allOrPartText = "";
-    partText = "";
-    originalText = "";
+    visitedQuestions         = [];
+    selectedQ3PromptText     = "";
+    selectedQ6PromptText     = "";
+    selectedQ7PromptText     = "";
+    selectedQ10PromptText    = "";
+    selectedQ11PromptText    = "";
+    writtenTestMarks         = "";
+    userQuestionText         = "";
+    userAnswerText           = "";
+    allOrPartText            = "";
+    partText                 = "";
+    originalText             = "";
   }
-  
-  // Show loading indicator
+
+  /* loading splash */
   formContainer.innerHTML = `
     <div class="centered-form-wrapper fade-in">
       <div class="styled-form-container">
@@ -67,78 +66,89 @@ function showFormSnippet(qualification, subject) {
     </div>
   `;
 
-  // Build the URL with qualification and subject parameters
-  let url = `/api/formSnippet?qualification=${encodeURIComponent(qualification)}&subject=${encodeURIComponent(subject)}`;
+  const url = `/api/formSnippet?qualification=${encodeURIComponent(
+    qualification
+  )}&subject=${encodeURIComponent(subject)}`;
 
   return fetch(url)
-    .then(r => {
+    .then((r) => {
       if (!r.ok) {
-        return r.text().then(errorText => {
-          throw new Error(`Failed to load form: ${errorText}`);
+        return r.text().then((t) => {
+          throw new Error(`Failed to load form: ${t}`);
         });
       }
       return r.text();
     })
-    .then(snippetHtml => {
-      // Insert the snippet into the DOM
+    .then((snippetHtml) => {
+      /* inject HTML -------------------------------------------------- */
       formContainer.innerHTML = `
         <div class="centered-form-wrapper fade-in">
           ${snippetHtml}
         </div>
       `;
 
-      // 1) Grab the .styled-form-container you just inserted
-      const containerDiv = formContainer.querySelector(".styled-form-container");
+      /* grab the wrapper we just inserted --------------------------- */
+      const containerDiv = formContainer.querySelector(
+        ".styled-form-container"
+      );
       if (containerDiv) {
-        try {
-          conditionalLogicMap = JSON.parse(containerDiv.getAttribute("data-logicmap") || "{}");
-          questionIndexMap = JSON.parse(containerDiv.getAttribute("data-questionindexmap") || "{}");
-          window.totalQuestions = parseInt(containerDiv.getAttribute("data-totalquestions") || "0", 10);
-          
-          // Parse all prompt arrays with the same robust approach
-          const parsePromptArray = (attrName) => {
-            const attr = containerDiv.getAttribute(attrName);
-            if (!attr) return [];
-            
-            try {
-              return JSON.parse(attr);
-            } catch (e) {
-              try {
-                const decoded = attr.replace(/&quot;/g, '"');
-                return JSON.parse(decoded);
-              } catch (e2) {
-                console.error(`[showFormSnippet] Failed to parse ${attrName} even after decoding:`, e2);
-                return [];
-              }
-            }
-          };
-          
-          // Load all prompt arrays
-          window.q3Prompts = parsePromptArray("data-q3prompts");
-          window.q6Prompts = parsePromptArray("data-q6prompts");
-          window.q7Prompts = parsePromptArray("data-q7prompts");
-          window.q10Prompts = parsePromptArray("data-q10prompts");
-          window.q11Prompts = parsePromptArray("data-q11prompts");
-          
-          console.log("[showFormSnippet] Loaded prompt data:", {
-            q3: window.q3Prompts.length,
-            q6: window.q6Prompts.length,
-            q7: window.q7Prompts?.length || 0,
-            q10: window.q10Prompts?.length || 0,
-            q11: window.q11Prompts?.length || 0
-          });
-        } catch (err) {
-          console.error("[showFormSnippet] Failed to parse snippet data attributes:", err);
-        }
+        /* pull JSON blobs that were embedded as data‑attributes */
+        const parse = (attr) => {
+          const raw = containerDiv.getAttribute(attr);
+          if (!raw) return {};
+          try {
+            return JSON.parse(raw);
+          } catch (e) {
+            /* handle the &quot;‑escaped variant */
+            return JSON.parse(raw.replace(/&quot;/g, '"'));
+          }
+        };
+
+        conditionalLogicMap = parse("data-logicmap");
+        questionIndexMap    = parse("data-questionindexmap");
+        window.totalQuestions = parseInt(
+          containerDiv.getAttribute("data-totalquestions") || "0",
+          10
+        );
+
+        /* prompt‑arrays */
+        window.q3Prompts  = parse("data-q3prompts");
+        window.q6Prompts  = parse("data-q6prompts");
+        window.q7Prompts  = parse("data-q7prompts");
+        window.q10Prompts = parse("data-q10prompts");
+        window.q11Prompts = parse("data-q11prompts");
       }
 
-      // Smooth-scroll the form into view
-      formContainer.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
+      /* ------------ ★ NEW PART ★ – merge questions into cache ------ */
+      if (window.isAdmin && window.questionsCache) {
+        formContainer
+          .querySelectorAll(".question-block")
+          .forEach((blk) => {
+            const id = blk.id;
+            /* skip if this question is already known */
+            if (window.questionsCache.some((q) => q.id === id)) return;
+
+            /* harvest title & options from DOM */
+            const title = blk.querySelector(".question-title")?.innerText.trim() || "";
+            const opts  = Array.from(
+              blk.querySelectorAll(".answer-box span")
+            ).map((s) => s.innerText.trim());
+
+            /* rebuild its conditionalLogic from the logic‑map */
+            const logic = (conditionalLogicMap[id] || []).map((r) => ({
+              option: opts.find((o) => escapeName(o) === r.option) || r.option,
+              goToQuestion: r.targetId,
+            }));
+
+            window.questionsCache.push({ id, title, options: opts, conditionalLogic: logic });
+          });
+      }
+      /* ------------------------------------------------------------- */
+
+      /* gently scroll the form into view */
+      formContainer.scrollIntoView({ behavior: "smooth", block: "center" });
     })
-    .catch(err => {
+    .catch((err) => {
       console.error("Error loading form snippet:", err);
       formContainer.innerHTML = `
         <div class="centered-form-wrapper fade-in">
@@ -374,48 +384,61 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       saveBtn.className   = "admin-save-btn subject-btn";
       saveBtn.style.marginTop = "10px";
       saveBtn.style.display   = "none";
-  
+
       saveBtn.addEventListener("click", async () => {
         const updated = structuredClone(original);
-      
+
         /* pull latest edits */
         if (titleDiv) updated.title = titleDiv.innerText.trim();
         const spans = nextBlock.querySelectorAll(".answer-box span");
-        updated.options = Array.from(spans).map(s => s.innerText.trim());
-      
-        updated.conditionalLogic = Array.from(nextBlock.querySelectorAll(".answer-box"))
-          .map(box => {
+        updated.options = Array.from(spans).map((s) => s.innerText.trim());
+
+        updated.conditionalLogic = Array.from(
+          nextBlock.querySelectorAll(".answer-box")
+        )
+          .map((box) => {
             const txt  = box.querySelector("span").innerText.trim();
             const dest = box.querySelector(".admin-logic-input").value.trim();
             return dest ? { option: txt, goToQuestion: dest } : null;
           })
           .filter(Boolean);
-      
+
+        /* ★ attach qualification & subject so the API updates
+             the correct JSON file when this is NOT a base‑form Q */
+        if (currentQualification && currentActiveSubject) {
+          updated._meta = {
+            qualification: currentQualification,
+            subject: currentActiveSubject,
+          };
+        }
+
         /* PUT -> server */
         try {
           const resp = await fetch(`/api/questions/${nextId}`, {
-            method : "PUT",
-            headers: { "Content-Type":"application/json" },
-            body   : JSON.stringify(updated)
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updated),
           });
-      
+
           if (!resp.ok) {
             const msg = await resp.text();
             return alert("Save failed: " + msg);
           }
-      
+
           alert("Saved!");
-      
+
           /* keep local copies fresh */
-          const idx = window.questionsCache.findIndex(q => q.id === nextId);
+          const idx = window.questionsCache.findIndex((q) => q.id === nextId);
           if (idx !== -1) window.questionsCache[idx] = updated;
-          conditionalLogicMap[nextId] = updated.conditionalLogic
-            .map(r => ({ option: escapeName(r.option), targetId: r.goToQuestion }));
+          conditionalLogicMap[nextId] = updated.conditionalLogic.map((r) => ({
+            option: escapeName(r.option),
+            targetId: r.goToQuestion,
+          }));
         } catch (err) {
           alert("Save failed: " + err.message);
         }
       });
-  
+
       nextBlock.appendChild(saveBtn);
       nextBlock.setAttribute("data-adminified", "1");
     }
@@ -671,51 +694,63 @@ function decorateQuestionForAdmin(block) {
     saveBtn.className = "admin-save-btn subject-btn";
     saveBtn.style.marginTop = "10px";
     saveBtn.style.display = window.editMode ? "" : "none";
-    
+
     saveBtn.addEventListener("click", async () => {
       const updated = structuredClone(original);
-      
-      // Pull latest edits
+
+      /* pull latest edits */
       if (titleDiv) updated.title = titleDiv.innerText.trim();
       const spans = block.querySelectorAll(".answer-box span");
-      updated.options = Array.from(spans).map(s => s.innerText.trim());
-      
-      updated.conditionalLogic = Array.from(block.querySelectorAll(".answer-box"))
-        .map(box => {
-          const txt = box.querySelector("span").innerText.trim();
+      updated.options = Array.from(spans).map((s) => s.innerText.trim());
+
+      updated.conditionalLogic = Array.from(
+        block.querySelectorAll(".answer-box")
+      )
+        .map((box) => {
+          const txt  = box.querySelector("span").innerText.trim();
           const dest = box.querySelector(".admin-logic-input").value.trim();
           return dest ? { option: txt, goToQuestion: dest } : null;
         })
         .filter(Boolean);
-      
-      // PUT -> server
+
+      /* ★ again, include qualification/subject */
+      if (currentQualification && currentActiveSubject) {
+        updated._meta = {
+          qualification: currentQualification,
+          subject: currentActiveSubject,
+        };
+      }
+
+      /* PUT -> server */
       try {
         const resp = await fetch(`/api/questions/${questionId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updated)
+          body: JSON.stringify(updated),
         });
-        
+
         if (!resp.ok) {
           const msg = await resp.text();
           return alert(`Save failed for question ${questionId}: ${msg}`);
         }
-        
+
         alert(`Question ${questionId} saved!`);
-        
-        // Keep local copies fresh
-        const idx = window.questionsCache.findIndex(q => q.id === questionId);
+
+        /* refresh local cache */
+        const idx = window.questionsCache.findIndex((q) => q.id === questionId);
         if (idx !== -1) window.questionsCache[idx] = updated;
-        conditionalLogicMap[questionId] = updated.conditionalLogic
-          .map(r => ({ option: escapeName(r.option), targetId: r.goToQuestion }));
+        conditionalLogicMap[questionId] = updated.conditionalLogic.map((r) => ({
+          option: escapeName(r.option),
+          targetId: r.goToQuestion,
+        }));
       } catch (err) {
         alert(`Save failed for question ${questionId}: ${err.message}`);
       }
     });
-    
+
     block.appendChild(saveBtn);
   }
-  
+
   block.setAttribute("data-adminified", "1");
 }
 
@@ -792,15 +827,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------- qualification list (unchanged) -------------------- */
   fetch("/api/qualifications")
-    .then(res => res.json())
-    .then(arr => {
-      arr.forEach(q => {
-        const o = document.createElement("option");
-        o.value = q.qualification;
-        o.textContent = q.title;
-        qualSelect.appendChild(o);
-      });
+  .then(res => res.json())
+  .then(arr => {
+    console.log("[script.js] qualifications received from server:", arr);
+    arr.forEach(q => {
+      const o = document.createElement("option");
+      o.value = q.qualification;
+      o.textContent = q.title;
+      qualSelect.appendChild(o);
     });
+  })
+  .catch(err => console.error("Failed to load qualifications:", err));
 
   qualSelect.addEventListener("change", () => {
     currentQualification = qualSelect.value;
