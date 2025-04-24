@@ -17,7 +17,7 @@ const formsContainer = cosmosDb.container(process.env.COSMOS_FORMS_CONTAINER);
 const baseFormDocId = process.env.COSMOS_BASE_FORM_ID;
 
 const app = express();
-const PORT = 3000;
+const PORT = 8080;
 
 // Our global qualification → subject map
 const qualificationMap = {};
@@ -355,6 +355,7 @@ app.get("/api/formSnippet", async (req, res) => {
       promptData = {};              // fall back to empty object
     }
 
+    const q2Attr  = JSON.stringify(promptData.q2  || []).replace(/"/g, "&quot;");
     const q3Attr  = JSON.stringify(promptData.q3  || []).replace(/"/g, "&quot;");
     const q6Attr  = JSON.stringify(promptData.q6  || []).replace(/"/g, "&quot;");
     const q7Attr  = JSON.stringify(promptData.q7  || []).replace(/"/g, "&quot;");
@@ -385,6 +386,7 @@ app.get("/api/formSnippet", async (req, res) => {
      data-logicmap='${JSON.stringify(conditionalLogicMap)}'
      data-questionindexmap='${JSON.stringify(questionIndexMap)}'
      data-totalquestions='${formData.questions.length}'
+     data-q2prompts="${q2Attr}"
      data-q3prompts="${q3Attr}"
      data-q6prompts="${q6Attr}"
      data-q7prompts="${q7Attr}"

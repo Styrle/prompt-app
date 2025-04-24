@@ -9,12 +9,14 @@ let visitedQuestions = [];
 
 // Store user's final chosen prompt texts
 let allOrPartText = "";
+let performanceLevel = "";
 let partText = "";
 let originalText = "";
 let paperName = "";
 let minutesPerMark = "";
 
 // Store user’s final chosen Q3 prompt from prompt.json
+let selectedQ2PromptText = "";
 let selectedQ3PromptText = "";
 let selectedQ6PromptText = "";
 let selectedQ7PromptText = "";
@@ -44,6 +46,7 @@ function showFormSnippet(qualification, subject) {
   const isNewSubjectSelection = currentActiveSubject !== subject;
   if (isNewSubjectSelection) {
     visitedQuestions         = [];
+    selectedQ2PromptText     = "";
     selectedQ3PromptText     = "";
     selectedQ6PromptText     = "";
     selectedQ7PromptText     = "";
@@ -53,6 +56,7 @@ function showFormSnippet(qualification, subject) {
     userQuestionText         = "";
     userAnswerText           = "";
     allOrPartText            = "";
+    performanceLevel         = "";
     partText                 = "";
     originalText             = "";
   }
@@ -112,6 +116,7 @@ function showFormSnippet(qualification, subject) {
         );
 
         /* prompt‑arrays */
+        window.q2Prompts  = parse("data-q2prompts");
         window.q3Prompts  = parse("data-q3prompts");
         window.q6Prompts  = parse("data-q6prompts");
         window.q7Prompts  = parse("data-q7prompts");
@@ -203,7 +208,7 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
 
     if (
       selectedValue &&
-      ["q3", "q6", "q7", "q10", "q11"].includes(currentId)
+      ["q2" ,"q3", "q6", "q7", "q10", "q11"].includes(currentId)
     ) {
       // Normalise the user’s choice
       const plainChoice = selectedValue
@@ -253,6 +258,9 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     
       /* Map the result to the correct “selected…” variable */
       switch (currentId) {
+        case "q2" :
+          selectedQ2PromptText = matchedDescription;
+          break;
         case "q3":
           selectedQ3PromptText = matchedDescription;
           break;
@@ -309,6 +317,14 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
               console.log("[goToQuestion] User typed 'part' =>", partText);
               break;
           }
+      case "q34":
+        {
+          if (selectedValue) {
+              performanceLevel = selectedValue;
+              console.log("[goToQuestion] User selected 'all or part' =>", performanceLevel);
+          }
+          break;
+      }
       case "q37":
           {
               const inputEl = questionBlock.querySelector("textarea, input[type=text]");
@@ -457,7 +473,8 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     // 14) If Q38 => fill final prompt
     function buildFinalPrompt() {
       // Decide which prompt to use in order of priority
-      let finalPrompt = selectedQ3PromptText || 
+      let finalPrompt = selectedQ2PromptText ||
+                        selectedQ3PromptText || 
                         selectedQ6PromptText || 
                         selectedQ7PromptText || 
                         selectedQ10PromptText || 
@@ -470,10 +487,12 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
           { regex: /<marks>/g, value: writtenTestMarks },
           { regex: /<qualification>/g, value: currentQualification },
           { regex: /<topic>/g, value: currentActiveSubject },
-          { regex: /<paper>/g, value: paperName },
+          { regex: /<paper>/g, value: currentActiveSubject },
           { regex: /<minutes per mark>/g, value: minutesPerMark },
           { regex: /<all or part>/g, value: allOrPartText },
           { regex: /<part>/g, value: partText },
+          { regex: /<Performance level>/g, value: performanceLevel },
+          { regex: /<original text - content>/g, value: originalText },
           { regex: /<original text>/g, value: originalText },
           { regex: /<Question>/g, value: userQuestionText },
           { regex: /<Answer>/g, value: userAnswerText }
