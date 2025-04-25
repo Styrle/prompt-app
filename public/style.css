@@ -350,3 +350,24 @@ input[type="checkbox"]:checked + .answer-box {
 .styled-form-container {
   animation: fadeIn 0.8s ease forwards;
 }
+
+.upload-dropzone {
+  border: 2px dashed #aaa;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.upload-dropzone.highlight {
+  background: #f0f7ff;
+}
+.upload-dropzone ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.upload-dropzone.highlight {
+  background: #f0f7ff;
+}

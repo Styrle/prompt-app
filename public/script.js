@@ -6,6 +6,9 @@ let questionIndexMap   = {};
 let conditionalLogicMap = {};
 let visitedQuestions   = [];
 
+let uploadedDocs = [];
+let requiresUpload = false;
+
 // Store user's final chosen prompt texts
 let allOrPartText     = "";
 let performanceLevel  = "";
@@ -282,31 +285,33 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
 
   let nextId = proposedNextId;
 
-  /* ──────────────── HISTORY NAVIGATION ──────────────── */
+  /* ───────────── HISTORY NAVIGATION ───────────── */
   if (isBack) {
     if (visitedQuestions.length) nextId = visitedQuestions.pop();
   } else {
     visitedQuestions.push(currentId);
 
-    /* ---------- what did the user pick / type? ---------- */
+    /* what did the user pick / type? */
     let selectedValue = null;
-    const inputs = questionBlock.querySelectorAll(
-      "input[type=radio], input[type=checkbox], select"
-    );
-    for (const input of inputs) {
-      if (
-        (input.type === "radio" || input.type === "checkbox") &&
-        input.checked
-      ) {
-        selectedValue = input.value;
-        break;
-      }
-      if (input.tagName.toLowerCase() === "select" && input.value) {
-        selectedValue = input.value;
-      }
+    questionBlock
+      .querySelectorAll("input[type=radio], input[type=checkbox], select")
+      .forEach((el) => {
+        if (el.tagName.toLowerCase() === "select" && el.value) {
+          selectedValue = el.value;
+        } else if (["radio", "checkbox"].includes(el.type) && el.checked) {
+          selectedValue = el.value;
+        }
+      });
+
+    /* ▸ flag whether we need the upload section on q38 ------------- */
+    if (["q14", "q15", "q31"].includes(currentId)) {
+      requiresUpload =
+        selectedValue &&
+        ( /existing.*upload/i.test(selectedValue.replace(/_/g, " ")) ||
+          /uploaded.*document/i.test(selectedValue.replace(/_/g, " ")) );
     }
 
-    /* ────────────── PROMPT-ARRAY CAPTURE (unchanged) ───────────── */
+    /* ───────── PROMPT-ARRAY CAPTURE (unchanged) ───────── */
     if (
       selectedValue &&
       ["q2", "q3", "q6", "q7", "q10", "q11"].includes(currentId)
@@ -317,11 +322,11 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
         .replace(/[()]/g, "")
         .trim();
 
-      const pList = window[`${currentId}Prompts`] || [];
-      const found = pList.find(
+      const plist = window[`${currentId}Prompts`] || [];
+      const match = plist.find(
         (p) => p?.answer?.toLowerCase().replace(/[()]/g, "").trim() === plain
       );
-      const desc = found ? found.description : "";
+      const desc = match ? match.description : "";
 
       switch (currentId) {
         case "q2":
@@ -345,33 +350,31 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
 
-    /* ────────────── QUESTION-SPECIFIC CAPTURE ───────────── */
+    /* ───────── QUESTION-SPECIFIC CAPTURE (unchanged) ───────── */
     const titleText =
       questionBlock.querySelector(".question-title")?.innerText || "";
 
-    /* 1️⃣  TAXONOMY OPTIONS (multi-select, multi-level) */
+    /* taxonomy multi-selects */
     if (selectedValue) {
       const svLower = selectedValue.replace(/_/g, " ").toLowerCase();
       if (!svLower.includes("skip to end")) {
-        /* detect “level N” or “L N” in the title */
-        const match = titleText.match(/(?:level\s*|l)(\d+)/i);
-        if (match) {
-          const lvl = parseInt(match[1], 10) || 1;
+        const m = titleText.match(/(?:level\s*|l)(\d+)/i);
+        if (m) {
+          const lvl = parseInt(m[1], 10) || 1;
           const clean = selectedValue.replace(/_/g, " ").trim();
-
           if (!taxonomySelections[lvl]) taxonomySelections[lvl] = new Set();
-          taxonomySelections[lvl].add(clean); // allow many per level
+          taxonomySelections[lvl].add(clean);
         }
       }
     }
 
-    /* 2️⃣  FREE-TEXT TOPIC (q16) */
+    /* free-text topic (q16) */
     if (currentId === "q16") {
       const el = questionBlock.querySelector("textarea, input[type=text]");
       inputTopicText = el ? el.value.trim() : "";
     }
 
-    /* 3️⃣  OTHER EXISTING CAPTURES */
+    /* other bespoke captures */
     switch (currentId) {
       case "q4":
       case "q8": {
@@ -407,31 +410,81 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
 
-    /* 4️⃣  CONDITIONAL-LOGIC JUMP */
+    /* conditional-logic jump */
     const rule = (conditionalLogicMap[currentId] || []).find(
       (r) => r.option === selectedValue
     );
     if (rule?.targetId) nextId = rule.targetId;
   }
 
-  /* ────────────── NAVIGATE UI ───────────── */
+  /* ───────── NAVIGATE UI ───────── */
   questionBlock.style.display = "none";
   const nextBlock = document.getElementById(nextId);
   if (!nextBlock) return;
   nextBlock.style.display = "block";
 
-  /* ────────────── (ADMIN decoration unchanged) ───────────── */
+  /* ───────── FINAL-PROMPT (q38) ───────── */
+  if (nextId === "q38") {
+    /* show or hide uploader */
+    const uploadSection = nextBlock.querySelector("#upload-section");
+    if (uploadSection)
+      uploadSection.style.display = requiresUpload ? "block" : "none";
 
-  /* ────────────── PROMPT BUILDER ───────────── */
+    /* initialise drag-and-drop once */
+    if (requiresUpload) {
+      const dz = nextBlock.querySelector("#upload-dropzone");
+      if (dz && !dz.dataset.initialised) {
+        const fileInput = dz.querySelector("#file-input");
+        const list = dz.querySelector("#upload-file-list");
+        const refresh = () =>
+          (list.innerHTML = uploadedDocs
+            .map((f) => `<li>${f.name}</li>`)
+            .join(""));
+
+        dz.addEventListener("click", () => fileInput.click());
+        ["dragenter", "dragover"].forEach((evt) =>
+          dz.addEventListener(evt, (e) => {
+            e.preventDefault();
+            dz.classList.add("highlight");
+          })
+        );
+        ["dragleave", "drop"].forEach((evt) =>
+          dz.addEventListener(evt, () => dz.classList.remove("highlight"))
+        );
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault();
+          uploadedDocs = [...e.dataTransfer.files];
+          refresh();
+        });
+        fileInput.addEventListener("change", () => {
+          uploadedDocs = [...fileInput.files];
+          refresh();
+        });
+
+        dz.dataset.initialised = "1";
+        refresh();
+      }
+    }
+
+    /* show a mini summary below the textarea */
+    const summaryDiv = nextBlock.querySelector("#uploaded-files-summary");
+    if (summaryDiv) {
+      summaryDiv.innerHTML =
+        uploadedDocs.length && requiresUpload
+          ? `<h3>Uploaded document(s):</h3><ul>${uploadedDocs
+              .map((f) => `<li>${f.name}</li>`)
+              .join("")}</ul>`
+          : requiresUpload
+          ? "<p><em>No document uploaded yet</em></p>"
+          : "";
+    }
+  }
+
+  /* ───────── PROMPT BUILDER (unchanged) ───────── */
   function buildFinalPrompt() {
-    /* minutes-per-mark (unchanged) */
     minutesPerMark = "";
     const n = parseFloat(writtenTestMarks);
-    if (
-      !isNaN(n) &&
-      currentQualification &&
-      currentActiveSubject
-    ) {
+    if (!isNaN(n) && currentQualification && currentActiveSubject) {
       const row = minsPerMarkMatrix.find(
         (r) =>
           r.Qualification === currentQualification &&
@@ -439,11 +492,10 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       );
       if (row) {
         const f = parseFloat(row.MinsPerMark);
-        if (!isNaN(f)) minutesPerMark = (n * f).toFixed(2).toString();
+        if (!isNaN(f)) minutesPerMark = (n * f).toFixed(2);
       }
     }
 
-    /* pick base prompt */
     let finalPrompt =
       selectedQ2PromptText ||
       selectedQ3PromptText ||
@@ -454,24 +506,22 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       "";
 
     /* build topic list */
-    let topicReplacement = "";
-    const levels = Object.keys(taxonomySelections)
+    const levelKeys = Object.keys(taxonomySelections)
       .map((k) => parseInt(k, 10))
       .sort((a, b) => a - b);
-
-    if (levels.length) {
+    let topicReplacement = "";
+    if (levelKeys.length) {
       const parts = [];
-      levels.forEach((lvl) => {
+      levelKeys.forEach((lvl) =>
         taxonomySelections[lvl].forEach((txt) =>
           parts.push(`${txt} level ${lvl}`)
-        );
-      });
+        )
+      );
       topicReplacement = parts.join(", ");
     } else {
       topicReplacement = inputTopicText || currentActiveSubject;
     }
 
-    /* replacements */
     [
       [/<WTQ marks>/g, writtenTestMarks],
       [/<marks>/g, writtenTestMarks],
@@ -491,12 +541,12 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     });
 
     return finalPrompt
-      .replace(/<British values>/g, "")
-      .replace(/<Functional skills>/g, "")
+      .replace(/<British values>/gi, "")
+      .replace(/<Functional skills>/gi, "")
       .replace(/<KSB'?s?>/gi, "");
   }
 
-  /* insert / refresh prompt */
+  /* update the textarea when arriving at q38 */
   if (nextId === "q38") {
     const ta = document.getElementById("final-prompt-textarea");
     if (ta) ta.value = buildFinalPrompt();

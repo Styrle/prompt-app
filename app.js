@@ -509,7 +509,7 @@ app.listen(PORT, () => {
   
     formData.questions.forEach((question, idx) => {
       const containerId = question.id || `question-${idx}`;
-      const hiddenStyle = (idx === 0) ? "" : 'style="display:none;"';
+      const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
   
       html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
       html += `<div class="question-title">${question.title}</div>`;
@@ -518,90 +518,89 @@ app.listen(PORT, () => {
         html += `<p class="question-info">${question.info}</p>`;
       }
   
-      // Render inputs
+      /* ───────── normal input rendering (unchanged) ───────── */
       if (Array.isArray(question.options)) {
         if (question.type === "dropdown") {
           html += `<select class="answer-select" name="${escapeName(question.title)}"
                        ${question.isRequired ? "required" : ""}>
                      <option value="">Please select...</option>`;
-          question.options.forEach(optionText => {
-            html += `<option value="${escapeName(optionText)}">${optionText}</option>`;
+          question.options.forEach((opt) => {
+            html += `<option value="${escapeName(opt)}">${opt}</option>`;
           });
           html += `</select>`;
         } else {
-          let inputType = (question.type === "checkbox") ? "checkbox" : "radio";
-          question.options.forEach((optionText, optIndex) => {
-            const uniqueId = `${containerId}-opt${optIndex}`;
+          const inputType = question.type === "checkbox" ? "checkbox" : "radio";
+          question.options.forEach((opt, optIdx) => {
+            const uid = `${containerId}-opt${optIdx}`;
             html += `
               <div class="answer-option">
-                <label class="answer-box" for="${uniqueId}">
+                <label class="answer-box" for="${uid}">
                   <input
                     type="${inputType}"
-                    id="${uniqueId}"
+                    id="${uid}"
                     name="${escapeName(question.title)}"
-                    value="${escapeName(optionText)}"
-                    ${question.isRequired ? "required" : ""}
-                  />
-                  <span>${optionText}</span>
+                    value="${escapeName(opt)}"
+                    ${question.isRequired ? "required" : ""}/>
+                  <span>${opt}</span>
                 </label>
               </div>`;
           });
         }
+      } else if (question.type === "short_answer") {
+        html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
+                       ${question.isRequired ? "required" : ""}/>`;
+      } else if (question.type === "paragraph") {
+        html += `<textarea class="answer-textarea" name="${escapeName(question.title)}"
+                           ${question.isRequired ? "required" : ""}></textarea>`;
       } else {
-        if (question.type === "short_answer") {
-          html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""} />`;
-        } else if (question.type === "paragraph") {
-          html += `<textarea class="answer-textarea" name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""}></textarea>`;
-        } else {
-          // fallback
-          html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
-            ${question.isRequired ? "required" : ""} />`;
-        }
+        html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
+                       ${question.isRequired ? "required" : ""}/>`;
       }
   
-      // If this is Q38, we’ll let the frontend decide how to fill the textarea 
-      // based on the user’s earlier choices. So just add an empty <textarea> for now:
+      /* ───────── Final-Prompt (q38) – upload area & summary ───────── */
       if (question.id === "q38") {
         html += `
-          <div style="margin-top: 20px;">
-            <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+
+  
+          <div style="margin-top:20px;">
+            <label style="font-weight:bold; display:block; margin-bottom:5px;">
               Final Prompt
             </label>
-            <textarea id="final-prompt-textarea" rows="10" cols="80" style="width: 100%;"></textarea>
+            <textarea id="final-prompt-textarea" rows="10" cols="80"
+                      style="width:100%;"></textarea>
           </div>
-        `;
+          <div id="upload-section" style="display:none; margin-top:20px;">
+            <h3>Upload your existing document</h3>
+            <div class="upload-dropzone" id="upload-dropzone">
+              <input type="file" id="file-input" multiple style="display:none;">
+              <p class="upload-placeholder">
+                Drag &amp; drop files here or click to browse
+              </p>
+              <ul id="upload-file-list"></ul>
+            </div>
+          </div>`
+          ;
       }
   
-      // Nav arrows
+      /* nav arrows (unchanged) */
       html += `<div class="nav-arrows">`;
       if (idx > 0) {
-        const prevId = formData.questions[idx - 1].id || `question-${idx - 1}`;
-        html += `
-          <button type="button" class="nav-btn subject-btn"
-                  onclick="goToQuestionAsync('${containerId}', '${prevId}', true)">
-            ← Back
-          </button>`;
+        const prev = formData.questions[idx - 1].id || `question-${idx - 1}`;
+        html += `<button type="button" class="nav-btn subject-btn"
+                       onclick="goToQuestionAsync('${containerId}','${prev}',true)">← Back</button>`;
       }
       if (idx < formData.questions.length - 1) {
-        const nextId = formData.questions[idx + 1].id || `question-${idx + 1}`;
-        html += `
-          <button type="button" class="nav-btn subject-btn"
-                  onclick="goToQuestionAsync('${containerId}', '${nextId}', false)">
-            Next →
-          </button>`;
+        const next = formData.questions[idx + 1].id || `question-${idx + 1}`;
+        html += `<button type="button" class="nav-btn subject-btn"
+                       onclick="goToQuestionAsync('${containerId}','${next}',false)">Next →</button>`;
       } else {
-        html += `
-          <button type="submit" class="nav-btn subject-btn">
-            Finish
-          </button>`;
+        html += `<button type="submit" class="nav-btn subject-btn">Finish</button>`;
       }
       html += `</div></div>\n`;
     });
   
     return html;
-  }
+  }  
   
   function escapeName(str) {
     return str
