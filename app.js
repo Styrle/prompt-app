@@ -23,25 +23,41 @@ const PORT = 8080;
 const qualificationMap = {};
 
    
-const ADMIN_EMAILS =
-  (process.env.ADMIN_EMAILS)
-    .split(",")
-    .map(e => e.trim().toLowerCase());
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);                     // ← ignore accidental blanks
 
-    app.use(express.json());            
+/* -------------- isAdmin (updated) -------------- */
+function isAdmin(req) {
+  /* 1️⃣  email from query-string or custom header */
+  let email =
+    (req.query.email ||
+     req.headers["x-user-email"] ||
+     "").toLowerCase();
 
-    function isAdmin(req) {
-      // client sends ?email=jane@corp.com  ***or***  X‑User‑Email header
-        const email =
-        (req.query.email ||
-        req.headers["x-user-email"] ||
-        "").toLowerCase();
-    
-      if (email) return ADMIN_EMAILS.includes(email);
-    
-      /* fallback – auto‑admin when only one e‑mail is configured */
-      return ADMIN_EMAILS.length === 1;
-    }
+  /* 2️⃣  Azure App Service / Static Web Apps headers */
+  if (!email && req.headers["x-ms-client-principal-name"]) {
+    email = req.headers["x-ms-client-principal-name"].toLowerCase();
+  }
+
+  /* 3️⃣  Azure EasyAuth – decode base64 JSON blob */
+  if (!email && req.headers["x-ms-client-principal"]) {
+    try {
+      const buf   = Buffer.from(req.headers["x-ms-client-principal"], "base64");
+      const princ = JSON.parse(buf.toString("utf8"));
+      if (princ && princ.userDetails) {
+        email = princ.userDetails.toLowerCase();
+      }
+    } catch {/* ignore malformed header */}
+  }
+
+  /* 4️⃣  final decision */
+  if (email) return ADMIN_EMAILS.includes(email);
+
+  /* Safety-net: only auto-admin when *exactly* one address configured */
+  return ADMIN_EMAILS.length === 1;
+}
 
     console.log("Using container:", process.env.COSMOS_FORMS_CONTAINER);
     
