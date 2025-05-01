@@ -144,6 +144,8 @@ function showFormSnippet(qualification, subject) {
 
   formContainer.innerHTML = "";
 
+  
+
   /* reset state when the subject actually changes */
   const isNewSubjectSelection = currentActiveSubject !== subject;
   if (isNewSubjectSelection) {
@@ -272,6 +274,12 @@ function showFormSnippet(qualification, subject) {
 let userQuestionText = "";
 let userAnswerText = "";
 
+/* ------------------------------------------------------------------
+ *  CLIENT-SIDE  – navigate between questions
+ * ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────
+ *  MAIN NAVIGATION HANDLER – goToQuestionAsync
+ * ──────────────────────────────────────────────────────────────── */
 async function goToQuestionAsync(currentId, proposedNextId, isBack) {
   console.log(
     `[goToQuestion] currentId=${currentId}, proposedNextId=${proposedNextId}, isBack=${isBack}`
@@ -283,15 +291,20 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     return;
   }
 
-  let nextId = proposedNextId;
+  let nextId = proposedNextId;           // default: go where the button said
 
   /* ───────────── HISTORY NAVIGATION ───────────── */
   if (isBack) {
+    /* pop the stack when the user hits ← Back */
     if (visitedQuestions.length) nextId = visitedQuestions.pop();
+
   } else {
+    /* forward navigation – record where we’ve been */
     visitedQuestions.push(currentId);
 
-    /* what did the user pick / type? */
+    /* --------------------------------------------------------------
+       1️⃣  What did the user just choose / type on this question?
+    -------------------------------------------------------------- */
     let selectedValue = null;
     questionBlock
       .querySelectorAll("input[type=radio], input[type=checkbox], select")
@@ -303,15 +316,21 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
         }
       });
 
-    /* ▸ flag whether we need the upload section on q38 ------------- */
+    /* ▸ flag whether q38 needs the upload area */
     if (["q14", "q15", "q31"].includes(currentId)) {
       requiresUpload =
         selectedValue &&
-        ( /existing.*upload/i.test(selectedValue.replace(/_/g, " ")) ||
-          /uploaded.*document/i.test(selectedValue.replace(/_/g, " ")) );
+        (/existing.*upload/i.test(selectedValue.replace(/_/g, " ")) ||
+         /uploaded.*document/i.test(selectedValue.replace(/_/g, " ")));
     }
 
-    /* ───────── PROMPT-ARRAY CAPTURE (unchanged) ───────── */
+    /* --------------------------------------------------------------
+       2️⃣  Capture all the per-question data (unchanged original)
+    -------------------------------------------------------------- */
+    const titleText =
+      questionBlock.querySelector(".question-title")?.innerText || "";
+
+    /* prompt-array capture (q2/q3/q6/q7/q10/q11) */
     if (
       selectedValue &&
       ["q2", "q3", "q6", "q7", "q10", "q11"].includes(currentId)
@@ -329,32 +348,16 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       const desc = match ? match.description : "";
 
       switch (currentId) {
-        case "q2":
-          selectedQ2PromptText = desc;
-          break;
-        case "q3":
-          selectedQ3PromptText = desc;
-          break;
-        case "q6":
-          selectedQ6PromptText = desc;
-          break;
-        case "q7":
-          selectedQ7PromptText = desc;
-          break;
-        case "q10":
-          selectedQ10PromptText = desc;
-          break;
-        case "q11":
-          selectedQ11PromptText = desc;
-          break;
+        case "q2":  selectedQ2PromptText  = desc; break;
+        case "q3":  selectedQ3PromptText  = desc; break;
+        case "q6":  selectedQ6PromptText  = desc; break;
+        case "q7":  selectedQ7PromptText  = desc; break;
+        case "q10": selectedQ10PromptText = desc; break;
+        case "q11": selectedQ11PromptText = desc; break;
       }
     }
 
-    /* ───────── QUESTION-SPECIFIC CAPTURE (unchanged) ───────── */
-    const titleText =
-      questionBlock.querySelector(".question-title")?.innerText || "";
-
-    /* taxonomy multi-selects */
+    /* taxonomy multi-select */
     if (selectedValue) {
       const svLower = selectedValue.replace(/_/g, " ").toLowerCase();
       if (!svLower.includes("skip to end")) {
@@ -374,7 +377,7 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       inputTopicText = el ? el.value.trim() : "";
     }
 
-    /* other bespoke captures */
+    /* bespoke single-question captures */
     switch (currentId) {
       case "q4":
       case "q8": {
@@ -410,149 +413,115 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
 
-    /* conditional-logic jump */
+    /* --------------------------------------------------------------
+       3️⃣  Conditional-logic jump
+    -------------------------------------------------------------- */
     const rule = (conditionalLogicMap[currentId] || []).find(
       (r) => r.option === selectedValue
     );
-    if (rule?.targetId) nextId = rule.targetId;
+    if (rule?.targetId) nextId = rule.targetId;   // e.g. “skip to end”
   }
 
   /* ───────── NAVIGATE UI ───────── */
-  questionBlock.style.display = "none";
+  if (currentId !== "q38") questionBlock.style.display = "none";
+
   const nextBlock = document.getElementById(nextId);
   if (!nextBlock) return;
   nextBlock.style.display = "block";
 
-  /* ───────── FINAL-PROMPT (q38) ───────── */
+  /* ───────────────────────────────────────────────────────────────
+     4️⃣  Special handling for q38 **and** new Final-Prompt block
+  ─────────────────────────────────────────────────────────────── */
   if (nextId === "q38") {
-    /* show or hide uploader */
-    const uploadSection = nextBlock.querySelector("#upload-section");
-    if (uploadSection)
-      uploadSection.style.display = requiresUpload ? "block" : "none";
-
-    /* initialise drag-and-drop once */
-    if (requiresUpload) {
-      const dz = nextBlock.querySelector("#upload-dropzone");
-      if (dz && !dz.dataset.initialised) {
-        const fileInput = dz.querySelector("#file-input");
-        const list = dz.querySelector("#upload-file-list");
-        const refresh = () =>
-          (list.innerHTML = uploadedDocs
-            .map((f) => `<li>${f.name}</li>`)
-            .join(""));
-
-        dz.addEventListener("click", () => fileInput.click());
-        ["dragenter", "dragover"].forEach((evt) =>
-          dz.addEventListener(evt, (e) => {
-            e.preventDefault();
-            dz.classList.add("highlight");
-          })
-        );
-        ["dragleave", "drop"].forEach((evt) =>
-          dz.addEventListener(evt, () => dz.classList.remove("highlight"))
-        );
-        dz.addEventListener("drop", (e) => {
-          e.preventDefault();
-          uploadedDocs = [...e.dataTransfer.files];
-          refresh();
-        });
-        fileInput.addEventListener("change", () => {
-          uploadedDocs = [...fileInput.files];
-          refresh();
-        });
-
-        dz.dataset.initialised = "1";
-        refresh();
-      }
-    }
-
-    /* show a mini summary below the textarea */
-    const summaryDiv = nextBlock.querySelector("#uploaded-files-summary");
-    if (summaryDiv) {
-      summaryDiv.innerHTML =
-        uploadedDocs.length && requiresUpload
-          ? `<h3>Uploaded document(s):</h3><ul>${uploadedDocs
-              .map((f) => `<li>${f.name}</li>`)
-              .join("")}</ul>`
-          : requiresUpload
-          ? "<p><em>No document uploaded yet</em></p>"
-          : "";
+    const fpContainer = document.getElementById("final-prompt-container");
+    if (fpContainer) {
+      fpContainer.style.display = "block";
+      const ta = document.getElementById("final-prompt-textarea");
+      if (ta) ta.value = buildFinalPrompt();
+      fpContainer.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 
-  /* ───────── PROMPT BUILDER (unchanged) ───────── */
-  function buildFinalPrompt() {
-    minutesPerMark = "";
-    const n = parseFloat(writtenTestMarks);
-    if (!isNaN(n) && currentQualification && currentActiveSubject) {
-      const row = minsPerMarkMatrix.find(
-        (r) =>
-          r.Qualification === currentQualification &&
-          r.Paper === currentActiveSubject
-      );
-      if (row) {
-        const f = parseFloat(row.MinsPerMark);
-        if (!isNaN(f)) minutesPerMark = (n * f).toFixed(2);
-      }
+  /* keep the prompt live even if user moves around afterwards */
+  const fpTa = document.getElementById("final-prompt-textarea");
+  if (fpTa) fpTa.value = buildFinalPrompt();
+  
+
+  /* ───────────────────────────────────────────────────────────────
+     5️⃣  helper builds the prompt (unchanged original)
+  ─────────────────────────────────────────────────────────────── */
+/* ----------------------------------------------------------
+   helper – builds the finished prompt text
+---------------------------------------------------------- */
+function buildFinalPrompt() {
+  minutesPerMark = "";
+  const n = parseFloat(writtenTestMarks);
+  if (!isNaN(n) && currentQualification && currentActiveSubject) {
+    const row = minsPerMarkMatrix.find(
+      (r) =>
+        r.Qualification === currentQualification &&
+        r.Paper === currentActiveSubject
+    );
+    if (row) {
+      const f = parseFloat(row.MinsPerMark);
+      if (!isNaN(f)) minutesPerMark = (n * f).toFixed(2);
     }
-
-    let finalPrompt =
-      selectedQ2PromptText ||
-      selectedQ3PromptText ||
-      selectedQ6PromptText ||
-      selectedQ7PromptText ||
-      selectedQ10PromptText ||
-      selectedQ11PromptText ||
-      "";
-
-    /* build topic list */
-    const levelKeys = Object.keys(taxonomySelections)
-      .map((k) => parseInt(k, 10))
-      .sort((a, b) => a - b);
-    let topicReplacement = "";
-    if (levelKeys.length) {
-      const parts = [];
-      levelKeys.forEach((lvl) =>
-        taxonomySelections[lvl].forEach((txt) =>
-          parts.push(`${txt} level ${lvl}`)
-        )
-      );
-      topicReplacement = parts.join(", ");
-    } else {
-      topicReplacement = inputTopicText || currentActiveSubject;
-    }
-
-    [
-      [/<WTQ marks>/g, writtenTestMarks],
-      [/<marks>/g, writtenTestMarks],
-      [/<qualification>/g, currentQualification],
-      [/<topic>/g, topicReplacement],
-      [/<paper>/g, currentActiveSubject],
-      [/<minutes per mark>/g, minutesPerMark],
-      [/<all or part>/g, allOrPartText],
-      [/<part>/g, partText],
-      [/<Performance level>/g, performanceLevel],
-      [/<original text - content>/g, originalText],
-      [/<original text>/g, originalText],
-      [/<Question>/g, userQuestionText],
-      [/<Answer>/g, userAnswerText],
-    ].forEach(([re, val]) => {
-      if (val) finalPrompt = finalPrompt.replace(re, val);
-    });
-
-    return finalPrompt
-      .replace(/<British values>/gi, "")
-      .replace(/<Functional skills>/gi, "")
-      .replace(/<KSB'?s?>/gi, "");
   }
 
-  /* update the textarea when arriving at q38 */
-  if (nextId === "q38") {
-    const ta = document.getElementById("final-prompt-textarea");
-    if (ta) ta.value = buildFinalPrompt();
+  let finalPrompt =
+    selectedQ2PromptText ||
+    selectedQ3PromptText ||
+    selectedQ6PromptText ||
+    selectedQ7PromptText ||
+    selectedQ10PromptText ||
+    selectedQ11PromptText ||
+    "";
+
+  /* ---------- build the <topic> replacement ---------- */
+  const levelKeys = Object.keys(taxonomySelections)
+    .map((k) => parseInt(k, 10))
+    .sort((a, b) => a - b);
+
+  let topicReplacement = "";
+  if (levelKeys.length) {
+    const parts = [];
+    levelKeys.forEach((lvl) =>
+      taxonomySelections[lvl].forEach((txt) =>
+        parts.push(`${txt} level ${lvl}`)
+      )
+    );
+    topicReplacement = parts.join(", ");
+  } else {
+    topicReplacement = inputTopicText || currentActiveSubject;
   }
-  buildFinalPrompt();
+
+  /* ---------- token substitution ---------- */
+  [
+    [/<WTQ marks>/g, writtenTestMarks],
+    [/<marks>/g, writtenTestMarks],
+    [/<qualification>/g, currentQualification],
+    [/<topic>/g, topicReplacement],
+    [/<paper>/g, currentActiveSubject],
+    [/<minutes per mark>/g, minutesPerMark],
+    [/<all or part>/g, allOrPartText],
+    [/<part>/g, partText],
+    [/<Performance level>/g, performanceLevel],
+    [/<original text - content>/g, originalText],
+    [/<original text>/g, originalText],
+    [/<Question>/g, userQuestionText],
+    [/<Answer>/g, userAnswerText],
+  ].forEach(([re, val]) => {
+    if (val) finalPrompt = finalPrompt.replace(re, val);
+  });
+
+  return finalPrompt
+    .replace(/<British values>/gi, "")
+    .replace(/<Functional skills>/gi, "")
+    .replace(/<KSB'?s?>/gi, "");
 }
+
+}   //  ←← END of goToQuestionAsync   (next line is toggleAllQuestionsVisibility)
+
 
 function toggleAllQuestionsVisibility() {
   // Get all question blocks
@@ -924,4 +893,24 @@ window.showAllQuestions = false;
       subjectContainer.appendChild(b);
     });
   }
+});
+
+
+document.addEventListener('click', function (e) {
+  if (e.target?.id !== 'copy-prompt-btn') return;   // not our button
+
+  const ta  = document.getElementById('final-prompt-textarea');
+  const btn = e.target;
+  if (!ta) return;                                  // safety check
+
+  navigator.clipboard
+    .writeText(ta.value.trim())
+    .then(() => {
+      const originalText = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => (btn.textContent = originalText), 1500);
+    })
+    .catch(() => {
+      alert('Could not copy – please select the text and copy manually.');
+    });
 });

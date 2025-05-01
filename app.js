@@ -397,7 +397,9 @@ app.get("/api/formSnippet", async (req, res) => {
       if (q.id) questionIndexMap[q.id] = idx;
     });
 
-    const snippet = `
+    /* 4️⃣ — build the snippet  (<<< replace the whole const snippet = …) */
+  const snippet = `
+<!--  MAIN QUESTION CONTAINER  -->
 <div class="styled-form-container"
      data-logicmap='${JSON.stringify(conditionalLogicMap)}'
      data-questionindexmap='${JSON.stringify(questionIndexMap)}'
@@ -408,11 +410,30 @@ app.get("/api/formSnippet", async (req, res) => {
      data-q7prompts="${q7Attr}"
      data-q10prompts="${q10Attr}"
      data-q11prompts="${q11Attr}">
+
   <h2>${qualification} ${subject}</h2>
   <form>
-    ${formHtml}
+    ${formHtml}                       <!-- all questions inc. q38 -->
   </form>
-</div>`;
+</div>
+
+
+<!--  FINAL PROMPT — appears after q38 -->
+<div class="styled-form-container"
+     id="final-prompt-container"
+     style="display:none; margin-top:40px;">
+  <h2>Your Final Prompt</h2>
+  <p class="final-note">
+    (You’ll upload any accompanying document when you send the prompt to the AI.)
+  </p>
+
+  <textarea id="final-prompt-textarea" rows="10"></textarea>
+  <button id="copy-prompt-btn" class="subject-btn">Copy prompt</button>
+</div>
+
+
+`;
+
 
     res.send(snippet);
   } catch (err) {
@@ -503,104 +524,95 @@ app.listen(PORT, () => {
 /* ------------------------
    HELPER FUNCTIONS
    ------------------------ */
-   function buildForm(formData) {
-    if (!formData.questions) return "";
-    let html = "";
-  
-    formData.questions.forEach((question, idx) => {
-      const containerId = question.id || `question-${idx}`;
-      const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
-  
-      html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
-      html += `<div class="question-title">${question.title}</div>`;
-  
-      if (question.info) {
-        html += `<p class="question-info">${question.info}</p>`;
-      }
-  
-      /* ───────── normal input rendering (unchanged) ───────── */
-      if (Array.isArray(question.options)) {
-        if (question.type === "dropdown") {
-          html += `<select class="answer-select" name="${escapeName(question.title)}"
-                       ${question.isRequired ? "required" : ""}>
-                     <option value="">Please select...</option>`;
-          question.options.forEach((opt) => {
-            html += `<option value="${escapeName(opt)}">${opt}</option>`;
-          });
-          html += `</select>`;
-        } else {
-          const inputType = question.type === "checkbox" ? "checkbox" : "radio";
-          question.options.forEach((opt, optIdx) => {
-            const uid = `${containerId}-opt${optIdx}`;
-            html += `
-              <div class="answer-option">
-                <label class="answer-box" for="${uid}">
-                  <input
-                    type="${inputType}"
-                    id="${uid}"
-                    name="${escapeName(question.title)}"
-                    value="${escapeName(opt)}"
-                    ${question.isRequired ? "required" : ""}/>
-                  <span>${opt}</span>
-                </label>
-              </div>`;
-          });
-        }
-      } else if (question.type === "short_answer") {
-        html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
-                       ${question.isRequired ? "required" : ""}/>`;
-      } else if (question.type === "paragraph") {
-        html += `<textarea class="answer-textarea" name="${escapeName(question.title)}"
-                           ${question.isRequired ? "required" : ""}></textarea>`;
-      } else {
-        html += `<input class="answer-text" type="text" name="${escapeName(question.title)}"
-                       ${question.isRequired ? "required" : ""}/>`;
-      }
-  
-      /* ───────── Final-Prompt (q38) – upload area & summary ───────── */
-      if (question.id === "q38") {
-        html += `
+/* ------------------------------------------------------------------
+ *  SERVER-SIDE  – build the HTML for the one-page form
+ * ------------------------------------------------------------------ */
+function buildForm(formData) {
+  if (!formData.questions) return "";
+  let html = "";
 
-  
-          <div style="margin-top:20px;">
-            <label style="font-weight:bold; display:block; margin-bottom:5px;">
-              Final Prompt
-            </label>
-            <textarea id="final-prompt-textarea" rows="10" cols="80"
-                      style="width:100%;"></textarea>
-          </div>
-          <div id="upload-section" style="display:none; margin-top:20px;">
-            <h3>Upload your existing document</h3>
-            <div class="upload-dropzone" id="upload-dropzone">
-              <input type="file" id="file-input" multiple style="display:none;">
-              <p class="upload-placeholder">
-                Drag &amp; drop files here or click to browse
-              </p>
-              <ul id="upload-file-list"></ul>
-            </div>
-          </div>`
-          ;
-      }
-  
-      /* nav arrows (unchanged) */
-      html += `<div class="nav-arrows">`;
-      if (idx > 0) {
-        const prev = formData.questions[idx - 1].id || `question-${idx - 1}`;
-        html += `<button type="button" class="nav-btn subject-btn"
-                       onclick="goToQuestionAsync('${containerId}','${prev}',true)">← Back</button>`;
-      }
-      if (idx < formData.questions.length - 1) {
-        const next = formData.questions[idx + 1].id || `question-${idx + 1}`;
-        html += `<button type="button" class="nav-btn subject-btn"
-                       onclick="goToQuestionAsync('${containerId}','${next}',false)">Next →</button>`;
+  /* ───────────────────────────── QUESTIONS ───────────────────────────── */
+  formData.questions.forEach((question, idx) => {
+    const containerId = question.id || `question-${idx}`;
+    const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
+
+    html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
+    html +=   `<div class="question-title">${question.title}</div>`;
+
+    if (question.info) {
+      html += `<p class="question-info">${question.info}</p>`;
+    }
+
+    /* render inputs for every question EXCEPT q38 */
+    if (question.id !== "q38") {
+      const hasOpts = Array.isArray(question.options);
+
+      if (hasOpts && question.type === "dropdown") {
+        html += `<select class="answer-select" name="${escapeName(question.title)}"
+                         ${question.isRequired ? "required" : ""}>
+                   <option value="">Please select...</option>`;
+        question.options.forEach(opt => {
+          html += `<option value="${escapeName(opt)}">${opt}</option>`;
+        });
+        html += `</select>`;
+
+      } else if (hasOpts) {
+        const inputType = question.type === "checkbox" ? "checkbox" : "radio";
+        question.options.forEach((opt, optIdx) => {
+          const uid = `${containerId}-opt${optIdx}`;
+          html += `
+            <div class="answer-option">
+              <label class="answer-box" for="${uid}">
+                <input  type="${inputType}" id="${uid}"
+                        name="${escapeName(question.title)}"
+                        value="${escapeName(opt)}"
+                        ${question.isRequired ? "required" : ""}/>
+                <span>${opt}</span>
+              </label>
+            </div>`;
+        });
+
+      } else if (question.type === "short_answer") {
+        html += `<input  class="answer-text"  type="text"
+                         name="${escapeName(question.title)}"
+                         ${question.isRequired ? "required" : ""}/>`;
+
+      } else if (question.type === "paragraph") {
+        html += `<textarea class="answer-textarea"
+                           name="${escapeName(question.title)}"
+                           ${question.isRequired ? "required" : ""}></textarea>`;
+
       } else {
-        html += `<button type="submit" class="nav-btn subject-btn">Finish</button>`;
+        html += `<input  class="answer-text" type="text"
+                         name="${escapeName(question.title)}"
+                         ${question.isRequired ? "required" : ""}/>`;
       }
-      html += `</div></div>\n`;
-    });
-  
-    return html;
-  }  
+    }
+
+    /* ---------- NAVIGATION BUTTONS ---------- */
+    html += `<div class="nav-arrows">`;
+    if (idx > 0) {
+      const prev = formData.questions[idx - 1].id || `question-${idx - 1}`;
+      html += `<button type="button" class="nav-btn subject-btn"
+                       onclick="goToQuestionAsync('${containerId}','${prev}',true)">
+                 ← Back
+               </button>`;
+    }
+    if (idx < formData.questions.length - 1) {
+      const next = formData.questions[idx + 1].id || `question-${idx + 1}`;
+      html += `<button type="button" class="nav-btn subject-btn"
+                       onclick="goToQuestionAsync('${containerId}','${next}',false)">
+                 Next →
+               </button>`;
+    } else {
+      html += `<button type="submit" class="nav-btn subject-btn">Finish</button>`;
+    }
+    html += `</div></div>\n`;   /* close .question-block */
+  });
+
+  return html;
+}
+
   
   function escapeName(str) {
     return str
