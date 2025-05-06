@@ -24,9 +24,9 @@ const qualificationMap = {};
 
    
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
-  .split(",")
+  .split(/[,; ]+/)                // ← accept comma, semicolon or space
   .map(e => e.trim().toLowerCase())
-  .filter(Boolean);                     // ← ignore accidental blanks
+  .filter(Boolean);     
 
 /* -------------- isAdmin (updated) -------------- */
 function isAdmin(req) {
