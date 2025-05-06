@@ -318,7 +318,7 @@ app.get("/api/subjects", (req, res) => {
     return res.json([]);
   }
   // Filter out the special "__title" property
-  const subjectKeys = Object.keys(subjectsMap).filter(k => k !== "__title");
+  const subjectKeys = Object.keys(subjectsMap).filter((k) => !k.startsWith("__"));
   res.json(subjectKeys);
 });
 
@@ -534,7 +534,9 @@ function buildForm(formData) {
   /* ───────────────────────────── QUESTIONS ───────────────────────────── */
   formData.questions.forEach((question, idx) => {
     const containerId = question.id || `question-${idx}`;
-    const hiddenStyle = idx === 0 ? "" : 'style="display:none;"';
+
+    /* Show question 2 first (idx === 1) */
+    const hiddenStyle = idx === 1 ? "" : 'style="display:none;"';
 
     html += `<div class="question-block" id="${containerId}" ${hiddenStyle}>`;
     html +=   `<div class="question-title">${question.title}</div>`;
@@ -563,34 +565,33 @@ function buildForm(formData) {
           html += `
             <div class="answer-option">
               <label class="answer-box" for="${uid}">
-                <input  type="${inputType}" id="${uid}"
-                        name="${escapeName(question.title)}"
-                        value="${escapeName(opt)}"
-                        ${question.isRequired ? "required" : ""}/>
+                <input type="${inputType}" id="${uid}"
+                       name="${escapeName(question.title)}"
+                       value="${escapeName(opt)}"
+                       ${question.isRequired ? "required" : ""}/>
                 <span>${opt}</span>
               </label>
             </div>`;
         });
 
       } else if (question.type === "short_answer") {
-        html += `<input  class="answer-text"  type="text"
-                         name="${escapeName(question.title)}"
-                         ${question.isRequired ? "required" : ""}/>`;
-
+        html += `<input class="answer-text" type="text"
+                       name="${escapeName(question.title)}"
+                       ${question.isRequired ? "required" : ""}/>`;
       } else if (question.type === "paragraph") {
         html += `<textarea class="answer-textarea"
                            name="${escapeName(question.title)}"
                            ${question.isRequired ? "required" : ""}></textarea>`;
-
       } else {
-        html += `<input  class="answer-text" type="text"
-                         name="${escapeName(question.title)}"
-                         ${question.isRequired ? "required" : ""}/>`;
+        html += `<input class="answer-text" type="text"
+                       name="${escapeName(question.title)}"
+                       ${question.isRequired ? "required" : ""}/>`;
       }
     }
 
     /* ---------- NAVIGATION BUTTONS ---------- */
     html += `<div class="nav-arrows">`;
+
     if (idx > 0) {
       const prev = formData.questions[idx - 1].id || `question-${idx - 1}`;
       html += `<button type="button" class="nav-btn subject-btn"
@@ -598,6 +599,7 @@ function buildForm(formData) {
                  ← Back
                </button>`;
     }
+
     if (idx < formData.questions.length - 1) {
       const next = formData.questions[idx + 1].id || `question-${idx + 1}`;
       html += `<button type="button" class="nav-btn subject-btn"
@@ -607,11 +609,13 @@ function buildForm(formData) {
     } else {
       html += `<button type="submit" class="nav-btn subject-btn">Finish</button>`;
     }
+
     html += `</div></div>\n`;   /* close .question-block */
   });
 
   return html;
 }
+
 
   
   function escapeName(str) {

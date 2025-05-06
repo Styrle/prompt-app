@@ -441,3 +441,6 @@ input[type="checkbox"]:checked + .answer-box {
     margin: 0 0 12px 0;
   }
   
+  #q38 .nav-arrows {
+    display: none !important;
+  }

@@ -295,9 +295,17 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
 
   /* ───────────── HISTORY NAVIGATION ───────────── */
   if (isBack) {
-    /* pop the stack when the user hits ← Back */
-    if (visitedQuestions.length) nextId = visitedQuestions.pop();
-
+    /* 1️⃣  first throw away any duplicate “current” entry */
+    if (
+      visitedQuestions.length &&
+      visitedQuestions[visitedQuestions.length - 1] === currentId
+    ) {
+      visitedQuestions.pop();
+    }
+    /* 2️⃣  then grab the real previous question (or fall back) */
+    if (visitedQuestions.length) {
+      nextId = visitedQuestions.pop();
+    }
   } else {
     /* forward navigation – record where we’ve been */
     visitedQuestions.push(currentId);
@@ -325,12 +333,12 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     }
 
     /* --------------------------------------------------------------
-       2️⃣  Capture all the per-question data (unchanged original)
+       2️⃣  Capture all the per‑question data (unchanged original)
     -------------------------------------------------------------- */
     const titleText =
       questionBlock.querySelector(".question-title")?.innerText || "";
 
-    /* prompt-array capture (q2/q3/q6/q7/q10/q11) */
+    /* prompt‑array capture (q2/q3/q6/q7/q10/q11) */
     if (
       selectedValue &&
       ["q2", "q3", "q6", "q7", "q10", "q11"].includes(currentId)
@@ -357,7 +365,7 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
 
-    /* taxonomy multi-select */
+    /* taxonomy multi‑select */
     if (selectedValue) {
       const svLower = selectedValue.replace(/_/g, " ").toLowerCase();
       if (!svLower.includes("skip to end")) {
@@ -371,13 +379,13 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
       }
     }
 
-    /* free-text topic (q16) */
+    /* free‑text topic (q16) */
     if (currentId === "q16") {
       const el = questionBlock.querySelector("textarea, input[type=text]");
       inputTopicText = el ? el.value.trim() : "";
     }
 
-    /* bespoke single-question captures */
+    /* bespoke single‑question captures */
     switch (currentId) {
       case "q4":
       case "q8": {
@@ -414,23 +422,40 @@ async function goToQuestionAsync(currentId, proposedNextId, isBack) {
     }
 
     /* --------------------------------------------------------------
-       3️⃣  Conditional-logic jump
+       3️⃣  Conditional‑logic jump
     -------------------------------------------------------------- */
     const rule = (conditionalLogicMap[currentId] || []).find(
       (r) => r.option === selectedValue
     );
     if (rule?.targetId) nextId = rule.targetId;   // e.g. “skip to end”
+
+    /* ─── if we’re jumping straight to q38, remove the duplicate history entry ─── */
+    if (
+      nextId === "q38" &&
+      visitedQuestions.length &&
+      visitedQuestions[visitedQuestions.length - 1] === currentId
+    ) {
+      visitedQuestions.pop();
+    }
   }
 
   /* ───────── NAVIGATE UI ───────── */
-  if (currentId !== "q38") questionBlock.style.display = "none";
+  /* keep previous question visible when jumping forward to q38 */
+  if (currentId === "q38") {
+    /* leaving q38 → always hide it */
+    questionBlock.style.display = "none";
+  } else if (nextId !== "q38") {
+    /* any navigation that isn’t “→ q38” hides current */
+    questionBlock.style.display = "none";
+  }
+  /* (if nextId === 'q38' we leave the current block displayed) */
 
   const nextBlock = document.getElementById(nextId);
   if (!nextBlock) return;
   nextBlock.style.display = "block";
 
   /* ───────────────────────────────────────────────────────────────
-     4️⃣  Special handling for q38 **and** new Final-Prompt block
+     4️⃣  Special handling for q38 **and** new Final‑Prompt block
   ─────────────────────────────────────────────────────────────── */
   if (nextId === "q38") {
     const fpContainer = document.getElementById("final-prompt-container");
